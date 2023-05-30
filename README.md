@@ -187,17 +187,3 @@ $ cd visual_directory
 $ ffmpeg -framerate 30 -pattern_type glob -i '*.png' -c:v libx264 -r 30 -pix_fmt yuv420p
 -s 1600x950 path_to_video
 ```
-
-## 其他
-
-### 安装pypcd
-
-老版本代码使用pypcd来读取点云，如果需要安装pypcd，可以参考：
-
-```shell
-$ cd lib
-$ unzip pypcd
-$ cd pypcd-master
-$ python setup.py install
-```
-
