@@ -26,7 +26,9 @@ class LabelParser(object):
             "smallmovable"  : "Misc",
             "safetybarrier" : "Unknown",
             "smallunmovable": "Misc",
-            "warningpost"   : "Misc"
+            "warningpost"   : "Misc",
+            "fog"           : "Misc",
+            "sign"          : "Misc",
         }
         self.annotation_cls = list(self.cls_dict.keys())
         self.model_cls = [
@@ -56,6 +58,7 @@ class LabelParser(object):
         # Load the pkl labels
         pkl_file = open(pkl_label_path, 'rb')
         pkl_label = pkl.load(pkl_file)
+        frame_num = len(pkl_label)
         for frame_name, frame_label in tqdm(pkl_label.items()):
             for k, anno in enumerate(frame_label):
                 # print("ori lbl: ", anno["original_lbl"].lower())
@@ -63,8 +66,8 @@ class LabelParser(object):
                 anno_vec = np.array([anno["x"], anno["y"], anno["z"]])
                 anno_dist = np.linalg.norm(anno_vec)
                 if anno_dist > 400:
-                    continue
                     print(anno_vec)
+                    continue
                 if anno_cls in cls_stat:
                     # print("Cls stat: ", cls_stat[anno_cls])
                     cls_stat[anno_cls]["count"] += 1
@@ -85,7 +88,7 @@ class LabelParser(object):
         #                 cls_stat[anno_cls]["count"] += 1
         #                 if anno_dist > cls_stat[anno_cls]["max_dist"]:
         #                     cls_stat[anno_cls]["max_dist"] = anno_dist
-        return cls_stat
+        return frame_num, cls_stat
 
 
 
@@ -128,9 +131,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     label_parser = LabelParser()
-    pkl_stat = label_parser.parse_pkl_label(args.pkl_path)
+    frame_num, pkl_stat = label_parser.parse_pkl_label(args.pkl_path)
+    print("Frame number: ", frame_num)
     for stat_k, stat_v in pkl_stat.items():
-        print("Cls: {} Count: {} Max Dist: {}".format(
+        print("Cls: {} Count: {} Max Dist: {:.2f}".format(
             stat_k, stat_v["count"], stat_v["max_dist"]
         ))
 
