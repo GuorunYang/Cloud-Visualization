@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 import data_loader
 from tqdm import tqdm
 
@@ -33,62 +34,6 @@ class VisualBEV(object):
             self.area_scope = area_scope
         if not colormap is None:
             self.colormap = colormap
-
-
-    def draw_bev_map(self, draw_status, cloud_path, frame_results = None, frame_labels = None, frame_polys = None,
-                 frame_voxel_path = None, frame_image_path = None, histogram_intensity = True):
-        if draw_status["draw_cloud"]:
-            cloud = data_loader.load_cloud(cloud_path)
-            voxel_map = self.convert_pts_to_bev_map(cloud)
-            bev_map = voxel_map.sum(axis=2)
-
-            if draw_status["draw_intensity"]:
-                # Get the intensity map from last channel
-                intensity_map = voxel_map[:, :, -1]
-                if histogram_intensity:
-                    intensity_map = intensity_map.astype(np.uint8)
-                    intensity_map = cv2.equalizeHist(intensity_map)
-                else:
-                    intensity_map = intensity_map / max(intensity_map.max(), 1.0)
-
-                cmap = plt.get_cmap('hot')
-                bev_map = cmap(intensity_map)
-                bev_map = np.delete(bev_map, 3, axis = 2)
-                bev_map[:, :, [0, 1, 2]] = bev_map[:, :, [2, 1, 0]] * 255
-                bev_map = bev_map.astype(np.uint8)
-
-            else:
-                bev_index = bev_map > 0
-                bev_map = np.zeros([bev_map.shape[0], bev_map.shape[1], 3], dtype = np.uint8)
-                bev_map[bev_index] = (228, 197, 85)
-
-            if draw_status["draw_result"] and draw_status["draw_label"]:
-                det_boxes3d, det_scores, det_cls, det_trackids = data_loader.get_boxes_from_results(frame_results)
-                gt_boxes3d, gt_scores, gt_cls, gt_trackids = data_loader.get_boxes_from_labels(frame_labels)
-                bev_map = self.draw_bev_boxes(bev_map=bev_map.copy(), boxes3d=gt_boxes3d, labels=gt_cls,
-                                         scores=gt_scores, track_ids=gt_trackids,
-                                         thickness = 2, colorize_with_label = False, color=(178, 255, 102))
-                bev_map = self.draw_bev_boxes(bev_map = bev_map.copy(), boxes3d = det_boxes3d, labels = det_cls,
-                                         scores = det_scores, track_ids = det_trackids,
-                                         thickness = 2, colorize_with_label = False, color=(45, 151, 255))
-            else:
-                if draw_status["draw_result"]:
-                    det_boxes3d, det_scores, det_cls, det_trackids = data_loader.get_boxes_from_results(frame_results)
-                    bev_map = self.draw_bev_boxes(bev_map = bev_map.copy(), boxes3d = det_boxes3d, labels = det_cls,
-                                             scores = det_scores, track_ids = det_trackids)
-                if draw_status["draw_label"]:
-                    gt_boxes3d, gt_scores, gt_cls, gt_trackids = data_loader.get_boxes_from_labels(frame_labels)
-                    bev_map = self.draw_bev_boxes(bev_map = bev_map.copy(), boxes3d = gt_boxes3d, labels = gt_cls,
-                                             scores = gt_scores, track_ids = gt_trackids)
-                if draw_status["draw_poly"]:
-                    poly_boxes3d, poly_vertices3d, poly_cls, poly_trackids = data_loader.get_polys(frame_polys)
-                    bev_map = self.draw_bev_polys(bev_map = bev_map.copy(), polys = poly_vertices3d)
-            bev_image = bev_map.astype(np.uint8)
-            if draw_status["draw_voxel"]:
-                bev_image = self.draw_bev_voxels(bev_image, voxel_path = frame_voxel_path)
-            if draw_status["draw_image"]:
-                bev_image = self.draw_image(bev_image, image_path = frame_image_path, image_ratio = 0.2)
-            return bev_image
 
 
     def visualization(self, draw_status, draw_lists, draw_elements, save_path):
@@ -153,27 +98,60 @@ class VisualBEV(object):
         return True
 
 
+    def draw_bev_map(self, draw_status, cloud_path, frame_results = None, frame_labels = None, frame_polys = None,
+                 frame_voxel_path = None, frame_image_path = None, histogram_intensity = True):
+        if draw_status["draw_cloud"]:
+            cloud = data_loader.load_cloud(cloud_path)
+            voxel_map = self.convert_pts_to_bev_map(cloud)
+            bev_map = voxel_map.sum(axis=2)
 
-    def draw_legend(self, img, legend_vertex, legend_path, legend_ratio, alpha = 0.7):
-        '''
-            Draw legend on the image to indicate the category of detections
-        '''
-        legend_img = cv2.imread(legend_path)
-        # legend_img = cv2.cvtColor(legend_img, cv2.COLOR_BGR2RGB)
-        legend_height, legend_width = legend_img.shape[0], legend_img.shape[1]
-        legend_height = int(legend_height * legend_ratio)
-        legend_width = int(legend_width * legend_ratio)
-        legend_img = cv2.resize(legend_img, (legend_width, legend_height), interpolation=cv2.INTER_LINEAR)
+            if draw_status["draw_intensity"]:
+                # Get the intensity map from last channel
+                intensity_map = voxel_map[:, :, -1]
+                if histogram_intensity:
+                    intensity_map = intensity_map.astype(np.uint8)
+                    intensity_map = cv2.equalizeHist(intensity_map)
+                else:
+                    intensity_map = intensity_map / max(intensity_map.max(), 1.0)
 
-        legend_left = legend_vertex[0]
-        legend_right = legend_left + legend_width
-        legend_up = legend_vertex[1]
-        legend_down = legend_up + legend_height
+                cmap = plt.get_cmap('hot')
+                bev_map = cmap(intensity_map)
+                bev_map = np.delete(bev_map, 3, axis = 2)
+                bev_map[:, :, [0, 1, 2]] = bev_map[:, :, [2, 1, 0]] * 255
+                bev_map = bev_map.astype(np.uint8)
 
-        img_roi = img[legend_up:legend_down, legend_left:legend_right, :]
-        bless_roi = cv2.addWeighted(img_roi, 1-alpha, legend_img, alpha, 0.0)
-        img[legend_up:legend_down, legend_left:legend_right, :] = bless_roi
-        return img
+            else:
+                bev_index = bev_map > 0
+                bev_map = np.zeros([bev_map.shape[0], bev_map.shape[1], 3], dtype = np.uint8)
+                bev_map[bev_index] = (228, 197, 85)
+
+            if draw_status["draw_result"] and draw_status["draw_label"]:
+                det_boxes3d, det_scores, det_cls, det_trackids = data_loader.get_boxes_from_results(frame_results)
+                gt_boxes3d, gt_scores, gt_cls, gt_trackids = data_loader.get_boxes_from_labels(frame_labels)
+                bev_map = self.draw_bev_boxes(bev_map=bev_map.copy(), boxes3d=gt_boxes3d, labels=gt_cls,
+                                         scores=gt_scores, track_ids=gt_trackids,
+                                         thickness = 2, colorize_with_label = False, color=(178, 255, 102))
+                bev_map = self.draw_bev_boxes(bev_map = bev_map.copy(), boxes3d = det_boxes3d, labels = det_cls,
+                                         scores = det_scores, track_ids = det_trackids,
+                                         thickness = 2, colorize_with_label = False, color=(45, 151, 255))
+            else:
+                if draw_status["draw_result"]:
+                    det_boxes3d, det_scores, det_cls, det_trackids = data_loader.get_boxes_from_results(frame_results)
+                    bev_map = self.draw_bev_boxes(bev_map = bev_map.copy(), boxes3d = det_boxes3d, labels = det_cls,
+                                             scores = det_scores, track_ids = det_trackids)
+                if draw_status["draw_label"]:
+                    gt_boxes3d, gt_scores, gt_cls, gt_trackids = data_loader.get_boxes_from_labels(frame_labels)
+                    bev_map = self.draw_bev_boxes(bev_map = bev_map.copy(), boxes3d = gt_boxes3d, labels = gt_cls,
+                                             scores = gt_scores, track_ids = gt_trackids)
+                if draw_status["draw_poly"]:
+                    poly_boxes3d, poly_vertices3d, poly_cls, poly_trackids = data_loader.get_polys(frame_polys)
+                    bev_map = self.draw_bev_polys(bev_map = bev_map.copy(), polys = poly_vertices3d)
+            bev_image = bev_map.astype(np.uint8)
+            if draw_status["draw_voxel"]:
+                bev_image = self.draw_bev_voxels(bev_image, voxel_path = frame_voxel_path)
+            if draw_status["draw_image"]:
+                bev_image = self.draw_image(bev_image, image_path = frame_image_path, image_ratio = 0.2)
+            return bev_image
 
 
     def draw_bev_voxels(self, img, voxel_path, 
@@ -233,52 +211,6 @@ class VisualBEV(object):
         img_roi = img[image_up:image_down, image_left:image_right, :]
         bless_roi = cv2.addWeighted(img_roi, 1-alpha, camera_image, alpha, 0.0)
         img[image_up:image_down, image_left:image_right, :] = bless_roi
-        return img
-
-
-    def draw_me(self, img, car_vertex, car_path, car_ratio, height_delta = 20):
-        car_img = cv2.imread(car_path)
-        mask_img = cv2.cvtColor(car_img, cv2.COLOR_BGR2GRAY)
-        car_height, car_width = car_img.shape[0], car_img.shape[1]
-        car_height = int(car_height * car_ratio)
-        car_width = int(car_width * car_ratio)
-        car_img = cv2.resize(car_img, (car_width, car_height), interpolation=cv2.INTER_LINEAR)
-        mask_img = cv2.resize(mask_img, (car_width, car_height), interpolation=cv2.INTER_NEAREST)
-
-        car_left = car_vertex[0] - int(car_width / 2.0)
-        car_right = car_left + car_width
-        car_up = car_vertex[1] - int(car_height / 2.0) + height_delta
-        car_down = car_up + car_height
-
-        # img_roi = img[car_up:car_down, car_left:car_right, :]
-        # bless_roi = cv2.addWeighted(img_roi, 1-0.5, car_img, 0.5, 0.0)
-        # img[car_up:car_down, car_left:car_right, :] = bless_roi
-
-        for i in range(car_height - 1):
-            for j in range(car_width - 1):
-                if mask_img[i, j] != 0:
-                    img[car_up + i, car_left+j, :] = car_img[i, j, :]
-
-        # img[car_up:car_down, car_left:car_right, :] = car_img[:, :, :]
-        return img
-
-
-    def draw_counts(self, img, count_number, count_color, count_vertex = (100, 100), unit_height = 30, font_size = 14):
-        # x, y = count_vertex[0], count_vertex[1]
-        # font = cv2.FONT_HERSHEY_COMPLEX
-        # for i, cnt in enumerate(count_number):
-        #   y += unit_height
-        #   cv2.putText(img, str(cnt), (x, y), font, number_size, tuple(count_color[i]), 1, cv2.LINE_AA)
-        # return img
-        from PIL import ImageFont, ImageDraw, Image
-        x, y = count_vertex[0], count_vertex[1]
-        pil_img = Image.fromarray(img)
-        draw = ImageDraw.Draw(pil_img)
-        font = ImageFont.truetype('PingFang-SC-Regular.ttf', font_size)
-        for i, cnt in enumerate(count_number):
-            y += unit_height
-            draw.text((x, y), str(cnt), font=font, fill=tuple(count_color[i]))
-        img = np.array(pil_img)
         return img
 
 
@@ -397,7 +329,6 @@ class VisualBEV(object):
 
         return corners.astype(np.float32)
 
-
     def create_scope_filter(self, pts):
         """
         :param pts: (N, 3) point cloud in rect camera coords
@@ -410,7 +341,6 @@ class VisualBEV(object):
                        & (pts[2] > z_scope[0]) & (pts[2] < z_scope[1])
 
         return scope_filter
-
 
     def convert_pts_to_bev_map(self, points):
         """
@@ -438,7 +368,7 @@ class VisualBEV(object):
         voxel_map = np.zeros(voxelized_shape, dtype=np.float32)
         voxel_map[voxel_idxs[:, 0], voxel_idxs[:, 1], voxel_idxs[:, 2]] = 1.0
 
-        if points.shape[1] == 4:
+        if points.shape[1] >= 4:
             intensity = points[:, 3]
             if np.amax(intensity) <= 1.0:
                 intensity *= 255.0
@@ -452,7 +382,6 @@ class VisualBEV(object):
 
         voxel_map = np.flip(np.flip(voxel_map, axis=0), axis=1)
         return voxel_map
-
 
     def corners3d_to_bev_corners(self, corners3d):
         """
@@ -479,7 +408,6 @@ class VisualBEV(object):
         voxel_idxs[:, :, 1] = voxelized_shape[0] - x_idxs
         return voxel_idxs
 
-
     def pt_to_bev_pix(self, pt):
         """
         :param corners3d: (N, 3)
@@ -505,7 +433,6 @@ class VisualBEV(object):
         voxel_idxs[:, 1] = voxelized_shape[0] - x_idxs
         return voxel_idxs
 
-
     def draw_bev_circle_scale(self, image, circle_delta=10, circle_range=None, color=(0, 255, 0), thickness=1):
         font = cv2.FONT_HERSHEY_SIMPLEX
         circle_center = np.array([[0., 0., 0.]], dtype=np.float32)
@@ -524,7 +451,6 @@ class VisualBEV(object):
                         0.7, (0, 0, 255), 2, cv2.LINE_AA)
         return image
 
-
     def draw_bev_det_scope(self, image, det_scope=[[-50, 50], [-50, 50]], color=(0, 0, 255), thickness=1):
         font = cv2.FONT_HERSHEY_SIMPLEX
         det_box = np.array([
@@ -538,8 +464,14 @@ class VisualBEV(object):
         cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness)
         return image
 
+    def draw_bev_polys(self, bev_map, polys, thickness = 2, color = (224, 224, 224)):
+        if polys is None or len(polys) == 0:
+            return bev_map
+        else:
+            bev_map = self.draw_poly_lines(image = bev_map, polys = polys, color=color, thickness=thickness)
+            return bev_map
 
-    def draw_bev_polys(self, bev_map, polys, color=(0, 255, 0), thickness=2):
+    def draw_poly_lines(self, image, polys, color=(0, 255, 0), thickness=2):
         for k in range(len(polys)):
             vertices_array = np.asarray(polys[k], dtype=np.float32).reshape(-1, 3)
             for j in range(vertices_array.shape[0]):
@@ -555,9 +487,8 @@ class VisualBEV(object):
                 cv2.line(image, (x1, y1), (x2, y2), color, thickness=thickness)
         return image
 
-
-    def draw_bev_boxes(self, bev_map, boxes3d, labels, scores=None, track_ids=None, thickness=2,
-                       colorize_with_label = True, color=(0, 255, 0)):
+    def draw_bev_boxes(self, bev_map, boxes3d, labels, scores=None, track_ids=None, 
+        thickness=2, colorize_with_label = True, color=(0, 255, 0)):
         classes = ['', 'Car', 'Pedestrian', 'Cyclist', 'Truck', 'Cone', 'Unknown', 'Dontcare']
         if boxes3d is None or boxes3d.shape[0] == 0:
             return bev_map
@@ -597,7 +528,6 @@ class VisualBEV(object):
                                                   scores=None, thickness=thickness, track_ids=masked_track_ids,
                                                   box_labels=[classes[cur_label]] * mask.sum())
         return bev_map
-
 
     def draw_box_lines(self, image, bev_corners, color=(0, 255, 0), scores=None, thickness=2, 
                        track_ids=None, box_labels=None, arrow=True):

@@ -10,11 +10,10 @@ from time import sleep
 import visualize_utils_bev as visualize_utils
 import visualize_utils_3d as visualize_utils_3d
 
-
 import data_loader
 from visual_bev import VisualBEV
+from visual_3d import Visual3D
 
-# voxel_size = (0.12, 0.12, 0.2)
 # score_thresh = [0, 0.6, 0.45, 0.5, 0.6, 0, 0, 0]       # For Model V0.7
 # score_thresh = [0, 0.50, 0.45, 0.50, 0.50, 0, 0, 0]    # For Model V0.8
 # score_thresh = [0, 0.64, 0.43, 0.55, 0.64]      # For Model V2.3
@@ -92,6 +91,9 @@ def check_args(args):
         "draw_image"    : False,
         "draw_scale"    : False, 
         "draw_intensity": False,
+        "draw_ground"   : False,
+        "use_screenshot" : False,
+        "debug" : False,
     }
     cloud_format = {
         "bin_cloud" : False,
@@ -122,22 +124,22 @@ def check_args(args):
                 draw_status["draw_cloud"] = True
     elif os.path.isfile(args.cloud):
         draw_status["draw_frame"] = True
-        if cloud.endswith('.bin'):
+        if args.cloud.endswith('.bin'):
             draw_status["bin_cloud"] = True
             draw_status["draw_cloud"] = True
-            cloud_list.append(cloud)
-        elif cloud.endswith('pcd'):
+            cloud_list.append(args.cloud)
+        elif args.cloud.endswith('pcd'):
             draw_status["pcd_cloud"] = True
             draw_status["draw_cloud"] = True
-            cloud_list.append(cloud)
-        elif cloud.endswith('.txt'):
+            cloud_list.append(args.cloud)
+        elif args.cloud.endswith('.txt'):
             draw_status["txt_cloud"] = True
             draw_status["draw_cloud"] = True
-            cloud_list.append(cloud)
-        elif cloud.endswith('.npy'):
+            cloud_list.append(args.cloud)
+        elif args.cloud.endswith('.npy'):
             draw_status["npy_cloud"] = True
             draw_status["draw_cloud"] = True
-            cloud_list.append(cloud)
+            cloud_list.append(args.cloud)
         else:
             warnings.warn('The Cloud is neither pcd file nor bin file')
 
@@ -162,7 +164,7 @@ def check_args(args):
                 draw_status["draw_label"] = True
             else:
                 warnings.warn('The labels are not matching the clouds')
-        elif draw_status["draw_frame"] and os.path.isfile(label):
+        elif draw_status["draw_frame"] and os.path.isfile(args.label):
             draw_status["draw_label"] = True
         else:
             warnings.warn('The labels are not matching the clouds')
@@ -213,9 +215,12 @@ def check_args(args):
         draw_status["draw_scale"] = True
     if args.draw_ground:
         draw_status["draw_ground"] = True
+    # if args.use_screenshot:
+    #     draw_status["use_screenshot"] = True
+    if args.debug:
+        draw_status["debug"] = True
 
     return draw_status, cloud_format
-
 
 def set_views(args):
     voxel_size = (0.12, 0.12, 0.2)
@@ -224,13 +229,56 @@ def set_views(args):
 
     area_scope = [[-60, 220], [-72, 72], [-5, 5]]
     det_scope = [[-60, 220], [-72, 72]]
-    # if args.view.lower() == "vehicle":
+    # if args.viewpoint.lower() == "vehicle":
     #     area_scope = [[-72, 92], [-72, 72], [-5, 5]]
     #     det_scope = [[-40, 80], [-60, 60]]
-    if args.view.lower() == "v2x":
+    if args.viewpoint.lower() == "v2x":
         area_scope = [[-20, 80], [-80, 80], [-5, 5]]
         det_scope = [[-60, 60], [-60, 60]]
     return area_scope, det_scope, voxel_size
+
+def get_draw_list(args, draw_status):
+    # Load the results and labels
+    draw_lists = {
+        "cloud_list" : [],
+        "voxel_list" : [],
+        "image_list" : [],
+    }
+    draw_elements = {
+        "results"   : [],
+        "labels"    : [],
+        "polys"     : [],
+        "voxels"    : [],
+    }
+
+    if draw_status["draw_frame"]:
+        if draw_status["draw_cloud"]:
+            draw_lists["cloud_list"].append(args.cloud)
+        if draw_status["draw_voxel"]:
+            draw_lists["voxel_list"].append(args.voxel)
+        if draw_status["draw_image"]:
+            draw_lists["image_list"].append(args.image)
+        if draw_status["draw_result"]:
+            draw_elements["results"] = data_loader.load_single_result(args.result)
+        if draw_status["draw_label"]:
+            draw_elements["labels"] = data_loader.load_single_label(args.label)
+        if draw_status["draw_poly"]:
+            draw_elements["polys"] = data_loader.oad_single_poly(args.poly)
+
+    elif draw_status["draw_sequence"]:
+        if draw_status["draw_cloud"]:
+            draw_lists["cloud_list"] = data_loader.get_cloud_list(args.cloud, args.sort_by_num)
+        if draw_status["draw_voxel"]:
+            draw_lists["voxel_list"] = data_loader.get_voxel_list(args.voxel, args.sort_by_num)
+        if draw_status["draw_image"]:
+            draw_lists["image_list"] = data_loader.get_image_list(args.image, args.sort_by_num)
+        if draw_status["draw_result"]:
+            draw_elements["results"] = data_loader.load_results(args.result, args.sort_by_num)
+        if draw_status["draw_label"]:
+            draw_elements["labels"] = data_loader.load_labels(args.label, args.sort_by_num)
+        if draw_status["draw_poly"]:
+            draw_elements["polys"] = data_loader.load_polys(args.poly, args.sort_by_num)
+    return draw_lists, draw_elements
 
 
 def draw_3d_polys(fig, vertices3d, thickness=3, color=(224, 224, 224)):
@@ -268,92 +316,6 @@ def draw_3d_boxes(fig, boxes3d, labels, scores=None, track_ids=None, thickness=3
             fig = visualize_utils_3d.draw_tracksids(masked_boxes3d, masked_corners3d, masked_track_ids, fig,
                                                     arrow_color=cur_color, arrow_width=thickness)
     return fig
-
-
-def draw_bev_polys(bev_map, polys, thickness = 2, color = (224, 224, 224),
-                   area_scope =[[-72, 92], [-72, 72], [-5, 5]]):
-    if polys is None or len(polys) == 0:
-        return bev_map
-    else:
-        bev_map = visualize_utils.draw_bev_polys(image = bev_map, polys = polys, color=color, thickness=thickness,
-                                                 voxel_size=voxel_size, area_scope=area_scope)
-        return bev_map
-
-
-def draw_bev_boxes(bev_map, boxes3d, labels, scores=None, track_ids=None, thickness=2,
-                   colorize_with_label = True, color=(0, 255, 0),
-                   area_scope =[[-72, 92], [-72, 72], [-5, 5]]):
-    classes = ['', 'Car', 'Pedestrian', 'Cyclist', 'Truck', 'Cone', 'Unknown', 'Dontcare']
-    if boxes3d is None or boxes3d.shape[0] == 0:
-        return bev_map
-    corners3d = visualize_utils.boxes3d_to_corners3d_lidar(boxes3d)
-    bev_corners = visualize_utils.corners3d_to_bev_corners(corners3d, voxel_size=voxel_size, area_scope=area_scope)
-
-    for cur_label in range(labels.min(), labels.max() + 1):
-        if scores is None:
-            mask = (labels == cur_label)
-        else:
-            mask = (labels == cur_label) & (scores > score_thresh[cur_label])
-        if mask.sum() == 0:
-            continue
-        masked_track_ids = None
-        if track_ids is not None:
-            masked_track_ids = track_ids[mask]
-        if colorize_with_label:
-            bev_color_map = np.asarray(colormap)
-            bev_color_map = bev_color_map[:, [2, 1, 0]]
-            if scores is not None:
-                bev_map = visualize_utils.draw_bev_boxes(bev_map, bev_corners[mask],
-                                                        color=tuple(bev_color_map[cur_label]),
-                                                        scores=scores[mask], thickness=thickness, track_ids=masked_track_ids,
-                                                        box_labels=[classes[cur_label]] * mask.sum())
-            else:
-                bev_map = visualize_utils.draw_bev_boxes(bev_map, bev_corners[mask],
-                                                        color=tuple(bev_color_map[cur_label]),
-                                                        scores=None, thickness=thickness, track_ids=masked_track_ids,
-                                                        box_labels=[classes[cur_label]] * mask.sum())
-        else:
-            if scores is not None:
-                bev_map = visualize_utils.draw_bev_boxes(bev_map, bev_corners[mask], color=tuple(color),
-                                                        scores=scores[mask], thickness=thickness, track_ids=masked_track_ids,
-                                                        box_labels=[classes[cur_label]] * mask.sum())
-            else:
-                bev_map = visualize_utils.draw_bev_boxes(bev_map, bev_corners[mask], color=tuple(color),
-                                                        scores=None, thickness=thickness, track_ids=masked_track_ids,
-                                                        box_labels=[classes[cur_label]] * mask.sum())
-        # bev_maps = visualize_utils.draw_bev_circle_scale(bev_maps, voxel_size=voxel_size, area_scope=area_scope)
-        # bev_maps = visualize_utils.draw_bev_det_scope(bev_maps, det_scope=det_scope, voxel_size=voxel_size, area_scope=area_scope)
-    return bev_map
-
-
-def count_number(frame_results = None, frame_labels = None, view_region = [0, 40, -50, 50]):
-    count_dict = {
-        'Car': 0, 'Truck' : 1, 'Pedestrian' : 2, 'Cyclist' : 3
-    }
-    count_array = np.zeros((4, ), dtype = np.int)
-    if frame_results is not None:
-        det_types = None if 'name' not in frame_results['dets'] else frame_results['dets']['name']
-        det_boxes = None if 'det_box' not in  frame_results['dets'] else frame_results['dets']['det_box']
-        if not det_types is None:
-            for i, cls in enumerate(det_types):
-                cls_id = count_dict[cls]
-                x, y = det_boxes[i][0], det_boxes[i][2]
-                if x < view_region[0] or x > view_region[1] or y < view_region[2] or y > view_region[3]:
-                    continue
-                count_array[cls_id] += 1
-    elif frame_labels is not None:
-        gt_types = None if 'name' not in frame_labels['annos'] else frame_labels['annos']['name']
-        gt_boxes = None if 'gt_box' not in frame_labels['annos'] else frame_labels['annos']['gt_box']
-        if not gt_types is None:
-            for i, cls in enumerate(gt_types):
-                cls_id = count_dict[cls]
-                x, y = gt_boxes[i][0], gt_boxes[i][2]
-                if x < view_region[0] or x > view_region[1] or y < view_region[2] or y > view_region[3]:
-                    continue
-                count_array[cls_id] += 1
-    return count_array
-
-
 
 
 
@@ -442,86 +404,6 @@ def draw_3d_map(cloud_path, frame_results = None, frame_labels = None, frame_pol
             return img
         else:
             return fig
-
-
-
-
-def bev_visualization(draw_frame, draw_sequence, args, cloud_list, draw_cloud = True,
-                      draw_result = False, draw_label = False, draw_poly = False, draw_voxel = False, draw_image = False,
-                      results = None, labels = None, polys = None, voxel_list = None, image_list = None,
-                      colorize_by_intensity = False):
-    if draw_frame:
-        frame_cloud_path = cloud_list[0]
-        frame_results, frame_labels, frame_polys = None, None, None
-        frame_voxel_path, frame_image_path = None, None
-        if draw_result:
-            frame_results = results[0]
-        if draw_label:
-            frame_labels = labels[0]
-        if draw_poly:
-            frame_polys = polys[0]
-        if draw_voxel:
-            frame_voxel_path = voxel_list[0]
-        if draw_image:
-            frame_image_path = image_list[0]
-
-        frame_bev_map = draw_bev_map(frame_cloud_path, frame_results, frame_labels, frame_polys,
-                                     frame_voxel_path, frame_image_path, draw_cloud, draw_result,
-                                     draw_label, draw_poly, draw_voxel, draw_image,
-                                     args.with_ring, area_scope, colorize_by_intensity)
-        if args.draw_scale:
-            frame_bev_map = visualize_utils.draw_bev_circle_scale(
-                frame_bev_map, voxel_size=voxel_size, area_scope=area_scope, color = (200, 200, 200)
-            )
-        frame_bev_path = (frame_cloud_path.split('/')[-1]).split('.')[0] + '.png'
-        if os.path.isdir(args.visual):
-            # If the directory is provided, the map is writed into the directory
-            frame_bev_fn = (frame_cloud_path.split('/')[-1]).rsplit('.', 1)[0] + '.png'
-            frame_bev_path = os.path.join(args.visual, frame_bev_fn)
-            print('Visualized Frame Path: ', frame_bev_path)
-        elif args.visual.endswith('.png'):
-            # If the png path is provided, the map is save as the path
-            frame_bev_path = args.visual
-            print('Visualized Frame Path: ', frame_bev_path)
-        if not cv2.imwrite(frame_bev_path, frame_bev_map):
-            warnings.warn('Write Image Error! Please check the path!')
-            return False
-
-    elif draw_sequence:
-        if not os.path.exists(args.visual):
-            os.makedirs(args.visual)
-        print('Visualized Sequence Path: ', args.visual)
-        for i in tqdm(range(len(cloud_list))):
-            if i < args.beg_index or i >= args.end_index:
-                continue
-            frame_cloud_path = os.path.join(args.cloud, cloud_list[i])
-            frame_results, frame_labels, frame_polys = None, None, None
-            frame_voxel_path, frame_image_path = None, None
-            if draw_result:
-                frame_results = results[i]
-            if draw_label:
-                frame_labels = labels[i]
-            if draw_poly:
-                frame_polys = polys[i]
-            if draw_voxel:
-                frame_voxel_path = os.path.join(args.voxel, voxel_list[i])
-            if draw_image:
-                frame_image_path = os.path.join(args.image, image_list[i])
-
-            frame_bev_map = draw_bev_map(frame_cloud_path, frame_results, frame_labels, frame_polys,
-                                         frame_voxel_path, frame_image_path, draw_cloud, draw_result,
-                                         draw_label, draw_poly, draw_voxel, draw_image,
-                                         args.with_ring, area_scope, colorize_by_intensity)
-            if args.draw_scale:
-                frame_bev_map = visualize_utils.draw_bev_circle_scale(
-                    frame_bev_map, voxel_size=voxel_size, area_scope=area_scope, color=(200, 200, 200)
-                )
-            frame_bev_fn = os.path.splitext(cloud_list[i])[0] + '.png'
-            if not cv2.imwrite(os.path.join(args.visual, frame_bev_fn), frame_bev_map):
-                warnings.warn('Write Image Error! Please check the path!')
-                return False
-    return True
-
 
 def scene_visualization(draw_frame, draw_sequence, args, cloud_list, draw_cloud = True,
                         draw_result = False, draw_label = False, draw_poly = False, draw_voxel = False, draw_image = False,
@@ -612,83 +494,35 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--voxel', type=str, default=None, help='Voxel map path (file or directory)')
 
     parser.add_argument('--visual', type=str, default='visual_image', help='Save path for BEV or 3D maps (file or directory)')
-    parser.add_argument('--view',type=str, default='Truck', help='View points (Car, V2X, Truck)')
+    parser.add_argument('--viewpoint',type=str, default='Vehicle', help='View points (Vehicle, V2X)')
     parser.add_argument('--draw_3d', action='store_true', default=False, help='Draw 3D maps')
     parser.add_argument('--draw_scale', action='store_true', default=False, help='Draw the circle scales on BEV map')
     parser.add_argument('--draw_ground', action='store_true', default=False, help='Draw ground plane on 3D map')
     parser.add_argument('--debug', action='store_true', default=False, help='Debug mode')
     parser.add_argument('--ground_height', type=float, default=-1.60, help='Ground height')
-    parser.add_argument('--with_ring', action='store_true', default=False, help='Cloud with ring')
     parser.add_argument('--sort_by_num', action='store_true', default=False, help='Sort the files by number instead of name')
-    parser.add_argument('--beg_index', type=int, default=0, help='Begin index for sequence')
-    parser.add_argument('--end_index', type=int, default=10000, help='End index for sequence')
     parser.add_argument('--video_path', type=str, default=None, help='Video path')
     parser.add_argument('--colorize_by_intensity', action='store_true', default=False, help='Colorize the BEV cloud by intensity')
 
     args = parser.parse_args()
 
-    # Check the inputs
-    draw_status, cloud_format = check_args(args)
-    area_scope, det_scope, voxel_size = set_views(args)
+    # Settings
     cls_dict, cls_array, colormap = get_cls()
-    # Load the results and labels
-    draw_lists = {
-        "cloud_list" : [],
-        "voxel_list" : [],
-        "image_list" : [],
-    }
-    draw_elements = {
-        "results"   : [],
-        "labels"    : [],
-        "polys"     : [],
-        "voxels"    : [],
-    }
+    area_scope, det_scope, voxel_size = set_views(args)
+    draw_status, cloud_format = check_args(args)
+    draw_lists, draw_elements = get_draw_list(args, draw_status)
 
-    if draw_status["draw_frame"]:
-        if draw_status["draw_cloud"]:
-            draw_lists["cloud_list"].append(args.cloud)
-        if draw_status["draw_voxel"]:
-            draw_lists["voxel_list"].append(args.voxel)
-        if draw_status["draw_image"]:
-            draw_lists["image_list"].append(args.image)
-        if draw_status["draw_result"]:
-            draw_elements["results"] = data_loader.load_single_result(args.result)
-        if draw_status["draw_label"]:
-            draw_elements["labels"] = data_loader.load_single_label(args.label)
-        if draw_status["draw_poly"]:
-            draw_elements["polys"] = data_loader.oad_single_poly(args.poly)
-
-    elif draw_status["draw_sequence"]:
-        if draw_status["draw_cloud"]:
-            draw_lists["cloud_list"] = data_loader.get_cloud_list(args.cloud, args.sort_by_num)
-        if draw_status["draw_voxel"]:
-            draw_lists["voxel_list"] = data_loader.get_voxel_list(args.voxel, args.sort_by_num)
-        if draw_status["draw_image"]:
-            draw_lists["image_list"] = data_loader.get_image_list(args.image, args.sort_by_num)
-        if draw_status["draw_result"]:
-            draw_elements["results"] = data_loader.load_results(args.result, args.sort_by_num)
-        if draw_status["draw_label"]:
-            draw_elements["labels"] = data_loader.load_labels(args.label, args.sort_by_num)
-        if draw_status["draw_poly"]:
-            draw_elements["polys"] = data_loader.load_polys(args.poly, args.sort_by_num)
-
-
-    # Draw BEV maps or 3D maps
     if not args.draw_3d:
-        bev_visualizer = VisualBEV(voxel_size=voxel_size, area_scope=area_scope, colormap=colormap)
         # Draw BEV maps
-        # bev_visualization(draw_frame=draw_frame, draw_sequence=draw_sequence, args=args, draw_cloud=draw_cloud,
-        #     draw_result=draw_result, draw_label=draw_label, draw_poly=draw_poly, draw_voxel = draw_voxel, draw_image = draw_image,
-        #     cloud_list=cloud_list, results=results, labels=labels, polys = polys, voxel_list = voxel_list, image_list = image_list,
-        #     colorize_by_intensity = args.colorize_by_intensity)
+        bev_visualizer = VisualBEV(voxel_size=voxel_size, area_scope=area_scope, colormap=colormap)
         bev_visualizer.visualization(draw_status, draw_lists, draw_elements, args.visual)
 
     else:
         # Draw 3D maps
-        scene_visualization(draw_frame = draw_frame, draw_sequence = draw_sequence, args = args, draw_cloud=draw_cloud,
-            draw_result=draw_result, draw_label=draw_label, draw_poly=draw_poly, draw_voxel = draw_voxel, draw_image = draw_image,
-            cloud_list = cloud_list, results = results, labels = labels, polys = polys, voxel_list = voxel_list, image_list = image_list)
-
+        scene_visualizer = Visual3D(voxel_size=voxel_size, area_scope=area_scope, 
+            colormap=colormap, viewpoint = args.viewpoint)
+        scene_visualizer.visualization(draw_status, draw_lists, draw_elements, args.visual)
+        
     # # Write the images to video
     # if draw_sequence and args.video_path is not None:
     #     # Create the video directory

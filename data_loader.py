@@ -424,3 +424,31 @@ def get_boxes_from_labels(frame_labels = None):
     else:
         return None
 
+
+
+def count_number(frame_results = None, frame_labels = None, view_region = [0, 40, -50, 50]):
+    count_dict = {
+        'Vehicle': 0, 'Pedestrian' : 1, 'Cyclist' : 2, 'Misc' : 2
+    }
+    count_array = np.zeros((4, ), dtype = np.int)
+    if frame_results is not None:
+        det_types = None if 'name' not in frame_results['dets'] else frame_results['dets']['name']
+        det_boxes = None if 'det_box' not in  frame_results['dets'] else frame_results['dets']['det_box']
+        if not det_types is None:
+            for i, cls in enumerate(det_types):
+                cls_id = count_dict[cls]
+                x, y = det_boxes[i][0], det_boxes[i][2]
+                if x < view_region[0] or x > view_region[1] or y < view_region[2] or y > view_region[3]:
+                    continue
+                count_array[cls_id] += 1
+    elif frame_labels is not None:
+        gt_types = None if 'name' not in frame_labels['annos'] else frame_labels['annos']['name']
+        gt_boxes = None if 'gt_box' not in frame_labels['annos'] else frame_labels['annos']['gt_box']
+        if not gt_types is None:
+            for i, cls in enumerate(gt_types):
+                cls_id = count_dict[cls]
+                x, y = gt_boxes[i][0], gt_boxes[i][2]
+                if x < view_region[0] or x > view_region[1] or y < view_region[2] or y > view_region[3]:
+                    continue
+                count_array[cls_id] += 1
+    return count_array
