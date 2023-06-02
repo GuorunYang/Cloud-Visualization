@@ -27,7 +27,7 @@ class LabelParser(object):
             "safetybarrier" : "Unknown",
             "smallunmovable": "Misc",
             "warningpost"   : "Misc",
-            "fog"           : "Misc",
+            "fog"           : "Unknown",
             "sign"          : "Misc",
         }
         self.annotation_cls = list(self.cls_dict.keys())

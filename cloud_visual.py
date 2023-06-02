@@ -3,6 +3,7 @@ import argparse
 import warnings
 import cv2
 import numpy as np
+import pickle5 as pkl
 from tqdm import tqdm
 from time import sleep
 import data_loader
@@ -16,40 +17,11 @@ from visual_3d import Visual3D
 # score_thresh = [0, 0.62, 0.43, 0.55, 0.62]      # For Model V2.6
 
 v2x_region = [0, 40, -50, 50]
-def get_cls():
+def get_colormap():
     # Classifications and color map
-    cls_array = [
-        'Car',
-        'Pedestrian',
-        'Cyclist',
-        'Truck',
-        'Cone',
-        'Unknown',
-        'Dontcare',
-        'Traffic_Warning_Object',
-        'Traffic_Warning_Sign',
-        'Road_Falling_Object',
-        'Road_Intrusion_Object',
-        'Animal'
-    ]
-    cls_dict = {
-        '0': 'Car',
-        '1': 'Pedestrian',
-        '2': 'Cyclist',
-        '3': 'Truck',
-        '4': 'Cone',
-        '5': 'Unknown',
-        '6': 'Dontcare',
-        '7': 'Traffic_Warning_Object',
-        '8': 'Traffic_Warning_Sign',
-        '9': 'Road_Falling_Object',
-        '10': 'Road_Intrusion_Object',
-        '11': 'Animal'
-    }
     colormap = [
-        [0, 0, 0],
+        # [0, 0, 0],
         [68, 255, 117],     # 0 Car: Green
-        # [255, 151, 45],   # 1 Pedestrian: Dark Orange
         [255, 51, 51],      # 1 Pedestrian: Red
         [255, 204, 45],     # 2 Cyclist: Gold Orange
         [142, 118, 255],    # 3 Truck: Purple
@@ -62,7 +34,7 @@ def get_cls():
         [255, 64, 64],    # 10 Road_Intrusion_Object: Brown1
         [255, 0, 255],    # 11 Animal: Magenta
     ]
-    return cls_dict, cls_array, colormap
+    return colormap
 
 def check_args(args):
     '''
@@ -84,7 +56,6 @@ def check_args(args):
         "draw_scale"    : False, 
         "draw_intensity": False,
         "draw_ground"   : False,
-        "use_screenshot" : False,
         "debug" : False,
     }
     cloud_format = {
@@ -150,14 +121,41 @@ def check_args(args):
 
     # Step 3: Check the label
     if args.label is not None:
-        if draw_status["draw_sequence"] and os.path.isdir(args.label):
-            label_list = sorted(os.listdir(args.label))
-            if len(label_list) == len(cloud_list):
-                draw_status["draw_label"] = True
+        if draw_status["draw_sequence"]:
+            if os.path.isdir(args.label):
+                label_list = sorted(os.listdir(args.label))
+                if len(label_list) == len(cloud_list):
+                    draw_status["draw_label"] = True
+                else:
+                    warnings.warn("The label number {} != cloud number {}".format(
+                        len(label_list), len(cloud_list)))
+            elif args.label.endswith(".pkl"):
+                with open(args.label, "rb") as f:
+                    label_dict = pkl.load(f)
+                    if len(label_dict) == len(cloud_list):
+                        draw_status["draw_label"] = True
+                    else:
+                        warnings.warn("The label number {} != cloud number {}".format(
+                            len(label_dict), len(cloud_list)))
             else:
                 warnings.warn('The labels are not matching the clouds')
-        elif draw_status["draw_frame"] and os.path.isfile(args.label):
-            draw_status["draw_label"] = True
+        elif draw_status["draw_frame"]:
+            if os.path.isdir(args.label) or (os.path.isfile(args.label) and args.label.endswith(".pkl")):
+                draw_status["draw_label"] = True
+            # if os.path.isdir(args.label):
+            #     label_list = sorted(os.listdir(args.label))
+            #     if len(label_list) == len(cloud_list):
+            #         draw_status["draw_label"] = True
+            #     else:
+            #         warnings.warn("The label number {} != cloud number".format(len(label_list)))
+            # elif args.label.endswith(".pkl"):
+            #      with open(args.label, "rb") as f:
+            #         label_dict = pkl.load(f)
+            #         frame_name = os.path.splitext(args.cloud.split("/")[-1])[0]
+            #         if frame_name in label_dict:
+            #             draw_status["draw_label"] = True
+            #         else:
+            #             warnings.warn("The cloud frame {} NOT in label pkl".format(frame_name))
         else:
             warnings.warn('The labels are not matching the clouds')
 
@@ -207,8 +205,6 @@ def check_args(args):
         draw_status["draw_scale"] = True
     if args.draw_ground:
         draw_status["draw_ground"] = True
-    # if args.use_screenshot:
-    #     draw_status["use_screenshot"] = True
     if args.debug:
         draw_status["debug"] = True
 
@@ -250,10 +246,11 @@ def get_draw_list(args, draw_status):
             draw_lists["voxel_list"].append(args.voxel)
         if draw_status["draw_image"]:
             draw_lists["image_list"].append(args.image)
+        query_frame = os.path.splitext(args.cloud.split("/")[-1])[0]
         if draw_status["draw_result"]:
             draw_elements["results"] = data_loader.load_single_result(args.result)
         if draw_status["draw_label"]:
-            draw_elements["labels"] = data_loader.load_single_label(args.label)
+            draw_elements["labels"] = data_loader.load_labels(args.label, query_frame=query_frame)
         if draw_status["draw_poly"]:
             draw_elements["polys"] = data_loader.oad_single_poly(args.poly)
 
@@ -290,13 +287,12 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', default=False, help='Debug mode')
     parser.add_argument('--ground_height', type=float, default=-1.60, help='Ground height')
     parser.add_argument('--sort_by_num', action='store_true', default=False, help='Sort the files by number instead of name')
-    parser.add_argument('--video_path', type=str, default=None, help='Video path')
     parser.add_argument('--colorize_by_intensity', action='store_true', default=False, help='Colorize the BEV cloud by intensity')
 
     args = parser.parse_args()
 
     # Settings
-    cls_dict, cls_array, colormap = get_cls()
+    colormap = get_colormap()
     area_scope, det_scope, voxel_size = set_views(args)
     draw_status, cloud_format = check_args(args)
     draw_lists, draw_elements = get_draw_list(args, draw_status)
@@ -311,36 +307,3 @@ if __name__ == '__main__':
         scene_visualizer = Visual3D(voxel_size=voxel_size, area_scope=area_scope, 
             colormap=colormap, viewpoint = args.viewpoint)
         scene_visualizer.visualization(draw_status, draw_lists, draw_elements, args.visual)
-        
-    # # Write the images to video
-    # if draw_sequence and args.video_path is not None:
-    #     # Create the video directory
-    #     if not os.path.exists(os.path.dirname(args.video_path)):
-    #         os.makedirs(os.path.dirname(args.video_path))
-    #     if not args.draw_3d:
-    #         image_list = os.listdir(args.visual)
-    #     else:
-    #         image_list = os.listdir(args.visual)
-    #     if args.sort_by_num:
-    #         image_list = sorted(image_list, key=lambda x: int(x.split('.')[0]))
-    #     else:
-    #         image_list = sorted(image_list)
-
-    #     # Initialize the video object
-    #     cloud_image = cv2.imread(os.path.join(args.visual, image_list[0]))
-    #     frame_height, frame_width, frame_channels = cloud_image.shape
-
-    #     # Check the video path
-    #     video_dir = os.path.dirname(args.video_path)
-    #     if not os.path.exists(video_dir):
-    #         os.makedirs(video_dir)
-    #     if not args.video_path.endswith('.avi'):
-    #         args.video_path = args.video_path.split('.')[0] + '.avi'
-    #     cloud_video = cv2.VideoWriter(args.video_path, cv2.VideoWriter_fourcc(*'MPEG'), 10,
-    #                                   (frame_width,frame_height))
-    #     for index, image_fn in enumerate(image_list):
-    #         if index < args.beg_index or index >= args.end_index:
-    #             continue
-    #         cloud_video.write(cv2.imread(os.path.join(args.visual, image_fn)))
-    #     cv2.destroyAllWindows()
-    #     cloud_video.release()

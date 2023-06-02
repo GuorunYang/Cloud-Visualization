@@ -1,9 +1,47 @@
 import os
 import json
 import numpy as np
-import pickle as pkl
+import pickle5 as pkl
 from tqdm import tqdm
 from pypcd import pypcd
+
+
+classes = [
+    'Car',
+    'Pedestrian',
+    'Cyclist',
+    'Truck',
+    'Misc',
+    'Cone',
+    'Unknown',
+    # 'Dontcare',
+    # 'Traffic_Warning_Object',
+    # 'Traffic_Warning_Sign',
+    # 'Road_Falling_Object',
+    # 'Road_Intrusion_Object',
+    # 'Animal'
+]
+cls_dict = {
+    'smallmot'      : 'Vehicle',
+    'bigmot'        : 'Vehicle',
+    'trafficcone'   : 'Misc',
+    'pedestrian'    : 'Pedestrian',
+    'crashbarrel'   : 'Misc',
+    'tricyclist'    : 'Cyclist',
+    'bicyclist'     : 'Cyclist',
+    'motorcyclist'  : 'Cyclist',
+    'onlybicycle'   : 'Cyclist',
+    'crowd'         : 'Misc',
+    'onlytricycle'  : 'Cyclist',
+    'stopbar'       : 'Unknown',
+    'smallmovable'  : 'Misc',
+    'safetybarrier' : 'Unknown',
+    'smallunmovable': 'Misc',
+    'warningpost'   : 'Misc',
+    'fog'           : 'Unknown',
+    'sign'          : 'Misc',
+}
+
 
 def load_cloud(cloud_path):
 	if cloud_path.endswith('.bin'):
@@ -249,6 +287,94 @@ def load_single_label(label_path):
             labels[i]['annos'][key] = np.array(labels[i]['annos'][key])
     return labels
 
+def load_pkl_label(pkl_label_path, query_frame = None, sort_by_num = False):
+    annotation_cls = list(cls_dict.keys())
+    with open(pkl_label_path, 'rb') as f:
+        pkl_labels = pkl.load(f)
+        max_frames = len(pkl_labels)
+        labels = [{'annos': {}} for i in range(max_frames)]
+        # Scan each frame
+        frame_id = 0
+        query_flag = False
+        for frame_name, frame_label in tqdm(pkl_labels.items()):
+            if not query_frame is None:
+                if not query_frame in frame_name:
+                    continue
+                else:
+                    query_flag = True
+                    print("Query frame {} is in label pkl".format(query_frame))
+            for i, anno in enumerate(frame_label):
+                anno_type = cls_dict[anno['original_lbl'].lower()]
+                # anno_dimensions = [anno['height'], anno['width'], anno['length']]
+                anno_dimensions = [anno['width'], anno['length'], anno['height']]
+                anno_locations = [anno['x'], anno['y'], anno['z']]
+                anno_rotation_y = [np.pi / 2.0 - anno['rotation_y'] + np.pi]
+                anno_box3d = anno_locations + anno_dimensions + anno_rotation_y
+                if anno_type == 'Vehicle':
+                    if anno['length'] >= 6.0:
+                        anno_type = 'Truck'
+                    else:
+                        anno_type = 'Car'
+                if 'gt_box' in labels[frame_id]['annos']:
+                    labels[frame_id]['annos']['gt_box'].append(anno_box3d)
+                else:
+                    labels[frame_id]['annos']['gt_box'] = [anno_box3d]
+                if 'name' in labels[frame_id]['annos']:
+                    labels[frame_id]['annos']['name'].append(anno_type)
+                else:
+                    labels[frame_id]['annos']['name'] = [anno_type]
+            frame_id += 1
+        for i in range(len(labels)):
+            for key in labels[i]['annos']:
+                labels[i]['annos'][key] = np.array(labels[i]['annos'][key])
+        if not query_frame is None:
+            if not query_flag:
+                print("Query frame NOT in label pkl".format(query_frame))
+        return labels
+
+def load_dir_label(label_dir, query_frame = None, sort_by_num = False):
+    label_list = os.listdir(label_dir)
+    if sort_by_num:
+        label_list = sorted(label_list, key=lambda x: int(x.split('.')[0]))
+    else:
+        label_list = sorted(label_list)
+    max_frames = len(label_list)
+    labels = [{'annos': {}} for i in range(max_frames)]
+    query_flag = False
+    for frame_id, label_fn in enumerate(label_list):
+        label_path = os.path.join(label_dir, label_fn)
+        if not query_frame is None:
+            if not query_frame in label_fn:
+                continue
+            else:
+                query_flag = True
+                print("Query frame {} is in label directory".format(query_frame))
+        with open(label_path, 'r') as f:
+            label_lines = f.readlines()
+            for label_ln in label_lines:
+                label_type, label_box, label_score, label_iou, label_track = load_line(label_ln)
+                if 'gt_box' in labels[frame_id]['annos']:
+                    labels[frame_id]['annos']['gt_box'].append(label_box)
+                else:
+                    labels[frame_id]['annos']['gt_box'] = [label_box]
+                if 'name' in labels[frame_id]['annos']:
+                    labels[frame_id]['annos']['name'].append(label_type)
+                else:
+                    labels[frame_id]['annos']['name'] = [label_type]
+                if label_track is not None:
+                    if 'track_info' in labels[frame_id]['annos']:
+                        labels[frame_id]['annos']['track_info'].append(label_track)
+                    else:
+                        labels[frame_id]['annos']['track_info'] = [label_track]
+    for i in range(len(labels)):
+        for key in labels[i]['annos']:
+            labels[i]['annos'][key] = np.array(labels[i]['annos'][key])
+    if not query_frame is None:
+        if not query_flag:
+            print("Query frame NOT in label directory".format(query_frame))
+    return labels
+
+
 def load_polys(poly_dir, sort_by_num = False):
     poly_list = os.listdir(poly_dir)
     if sort_by_num:
@@ -323,37 +449,22 @@ def load_results(det_dir, sort_by_num = False):
             results[i]['dets'][key] = np.array(results[i]['dets'][key])
     return results
 
-def load_labels(label_dir, sort_by_num = False):
-    label_list = os.listdir(label_dir)
-    if sort_by_num:
-        label_list = sorted(label_list, key=lambda x: int(x.split('.')[0]))
+def load_labels(label_pth, query_frame = None, sort_by_num = False):
+    if os.path.isdir(label_pth):
+        labels = load_dir_label(label_pth, query_frame)
+        return labels
+    elif os.path.isfile(label_pth):
+        if label_pth.endswith('.pkl'):
+            labels = load_pkl_label(label_pth, query_frame)
+            return labels
+        elif label_pth.endswith('.txt'):
+            labels = load_single_label(label_pth)
+            return labels
     else:
-        label_list = sorted(label_list)
-    max_frames = len(label_list)
-    labels = [{'annos': {}} for i in range(max_frames)]
-    for frame_id, label_fn in enumerate(label_list):
-        label_path = os.path.join(label_dir, label_fn)
-        with open(label_path, 'r') as f:
-            label_lines = f.readlines()
-            for label_ln in label_lines:
-                label_type, label_box, label_score, label_iou, label_track = load_line(label_ln)
-                if 'gt_box' in labels[frame_id]['annos']:
-                    labels[frame_id]['annos']['gt_box'].append(label_box)
-                else:
-                    labels[frame_id]['annos']['gt_box'] = [label_box]
-                if 'name' in labels[frame_id]['annos']:
-                    labels[frame_id]['annos']['name'].append(label_type)
-                else:
-                    labels[frame_id]['annos']['name'] = [label_type]
-                if label_track is not None:
-                    if 'track_info' in labels[frame_id]['annos']:
-                        labels[frame_id]['annos']['track_info'].append(label_track)
-                    else:
-                        labels[frame_id]['annos']['track_info'] = [label_track]
-    for i in range(len(labels)):
-        for key in labels[i]['annos']:
-            labels[i]['annos'][key] = np.array(labels[i]['annos'][key])
-    return labels
+        raise TypeError('Cannot load labels')
+        return None
+
+
 
 def get_cloud_list(cloud_dir, sort_by_num = False):
     cloud_list = os.listdir(cloud_dir)
@@ -384,7 +495,7 @@ def get_image_list(image_dir, sort_by_num = False):
 
 def get_polys(frame_polys = None):
     if frame_polys is not None:
-        classes = ['', 'Car', 'Pedestrian', 'Cyclist', 'Truck', 'Cone', 'Unknown', 'Dontcare']
+        # classes = ['', 'Car', 'Pedestrian', 'Cyclist', 'Truck', 'Cone', 'Unknown', 'Dontcare']
         poly_boxes3d = None if 'poly_box' not in frame_polys['polys'] else frame_polys['polys']['poly_box']
         poly_vertices = None if 'poly_vertices' not in frame_polys['polys'] else frame_polys['polys']['poly_vertices']
         poly_types = None if 'name' not in frame_polys['polys'] else frame_polys['polys']['name']
@@ -396,10 +507,10 @@ def get_polys(frame_polys = None):
 
 def get_boxes_from_results(frame_results = None):
     if frame_results is not None:
-        classes = ['', 'Car', 'Pedestrian', 'Cyclist', 'Truck', 'Cone', 'Unknown', 'Dontcare',
-                   'Traffic_Warning_Object', 'Traffic_Warning_Sign',
-                   'Road_Falling_Object', 'Road_Intrusion_Object', 'Animal'
-                   ]
+        # classes = ['', 'Car', 'Pedestrian', 'Cyclist', 'Truck', 'Cone', 'Unknown', 'Dontcare',
+        #            'Traffic_Warning_Object', 'Traffic_Warning_Sign',
+        #            'Road_Falling_Object', 'Road_Intrusion_Object', 'Animal'
+        #            ]
         det_boxes3d = None if 'det_box' not in frame_results['dets'] else frame_results['dets']['det_box']
         det_scores = None if 'score' not in frame_results['dets'] else frame_results['dets']['score']
         det_types = None if 'name' not in frame_results['dets'] else frame_results['dets']['name']
@@ -411,10 +522,10 @@ def get_boxes_from_results(frame_results = None):
 
 def get_boxes_from_labels(frame_labels = None):
     if frame_labels is not None:
-        classes = ['', 'Car', 'Pedestrian', 'Cyclist', 'Truck', 'Cone', 'Unknown', 'Dontcare',
-                   'Traffic_Warning_Object', 'Traffic_Warning_Sign',
-                   'Road_Falling_Object', 'Road_Intrusion_Object', 'Animal'
-                  ]
+        # classes = ['', 'Car', 'Pedestrian', 'Cyclist', 'Truck', 'Cone', 'Unknown', 'Dontcare',
+        #            'Traffic_Warning_Object', 'Traffic_Warning_Sign',
+        #            'Road_Falling_Object', 'Road_Intrusion_Object', 'Animal'
+        #           ]
         gt_boxes3d = None if 'gt_box' not in frame_labels['annos'] else frame_labels['annos']['gt_box']
         gt_types = None if 'name' not in frame_labels['annos'] else  frame_labels['annos']['name']
         gt_scores = None if 'score' not in frame_labels['annos'] else frame_labels['annos']['score']

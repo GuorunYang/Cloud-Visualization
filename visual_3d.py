@@ -1,6 +1,7 @@
 import os
 import cv2
 import math
+import time
 import numpy as np
 import data_loader
 from tqdm import tqdm
@@ -46,7 +47,9 @@ class Visual3D(object):
 
     def visualization(self, draw_status, draw_lists, draw_elements, save_path):
         import mayavi.mlab as mlab
-        mlab.options.offscreen = True
+        if not draw_status["debug"]:
+            mlab.options.offscreen = True
+        fig = mlab.figure(figure=None, bgcolor=(0, 0, 0), fgcolor=None, engine=None, size=(1600, 1000))
         if draw_status["draw_frame"]:
             frame_cloud_path = draw_lists["cloud_list"][0]
             frame_cloud_name = frame_cloud_path.split("/")[-1]
@@ -62,8 +65,11 @@ class Visual3D(object):
                 frame_voxel_path = draw_lists["voxel_list"][0]
             if draw_status["draw_image"]:
                 frame_image_path = draw_lists["image_list"][0]
-            frame_3d_fig = self.draw_3d_map(draw_status, frame_cloud_path, frame_results, 
+            fig = self.draw_3d_map(fig, draw_status, frame_cloud_path, frame_results, 
                 frame_labels, frame_polys, frame_voxel_path, frame_image_path)
+            if draw_status["debug"]:
+                mlab.show()
+            # Save the image
             frame_3d_path = ""
             if os.path.isdir(save_path):
                 # If the directory is provided, the map is writed into the directory
@@ -73,8 +79,8 @@ class Visual3D(object):
                 # If the png path is provided, the map is save as the path
                 frame_3d_path = save_path
             mlab.savefig(frame_3d_path)
-            # mlab.show()
-            mlab.clf()
+            print("Rendering image saves to {}".format(frame_3d_path))
+            mlab.clf(figure=fig)
         elif draw_status["draw_sequence"]:
             os.makedirs(save_path, exist_ok=True)
             print('Visualized Sequence Path: ', save_path)
@@ -93,22 +99,24 @@ class Visual3D(object):
                     frame_voxel_path = draw_lists["voxel_list"][i]
                 if draw_status["draw_image"]:
                     frame_image_path = draw_lists["image_list"][i]
-                frame_3d_fig = self.draw_3d_map(draw_status, frame_cloud_path, frame_results, 
+                fig = self.draw_3d_map(fig, draw_status, frame_cloud_path, frame_results, 
                     frame_labels, frame_polys, frame_voxel_path, frame_image_path)
+                if draw_status["debug"]:
+                    mlab.show()
                 frame_3d_fn = os.path.splitext(frame_cloud_name)[0] + '.png'
                 mlab.savefig(os.path.join(save_path, frame_3d_fn))
-                mlab.clf()
-                # sleep(0.05)
+                mlab.clf(figure=fig)
+            print("Rendering image saves to {}".format(save_path))
         mlab.close()
         return True
 
 
-    def draw_3d_map(self, draw_status, cloud_path, frame_results = None, frame_labels = None, frame_polys = None,
+    def draw_3d_map(self, fig, draw_status, cloud_path, frame_results = None, frame_labels = None, frame_polys = None,
                  frame_voxel_path = None, frame_image_path = None):
         import mayavi.mlab as mlab
         if draw_status["draw_cloud"]:
             cloud = data_loader.load_cloud(cloud_path)
-            fig = self.draw_lidar(cloud)
+            fig = self.draw_lidar(cloud, fig=fig)
             if draw_status["draw_result"] and draw_status["draw_label"]:
                 gt_color    = (178/255.0, 255/255.0, 102/255.0)
                 det_color   = (255/255.0, 151/255.0, 45/255.0)
@@ -152,37 +160,10 @@ class Visual3D(object):
                 # Viewpoint for V2X
                 mlab.view(azimuth=177.03, elevation=41.72, distance=116.11,
                           focalpoint=np.array([20.42, 1.71, 16.32]), roll=89.99)
-
-            if draw_status["debug"]:
-                mlab.show()
-                return fig
-            elif draw_status["use_screenshot"]:
-                # mlab.show()
-                from pyface.api import GUI
-                GUI().process_events()
-                img = mlab.screenshot()
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                # if not v2x:
-                #     me_points = np.array([[0.0, 0.0, 1.6]], dtype=np.float32)
-                #     me_vertex = self.proj_3d_to_2d(me_points, fig)[0]
-                #     me_vertex = np.asarray(me_vertex, dtype=np.int)
-                #     img = self.draw_me(img, me_vertex, './examples/icons/car_2d.png', 0.19, 65)  # For Car
-                #     img = self.draw_legend(img, [1350, 50], './examples/icons/legends_car.png', 1.0)
-                # else:
-                #     count_colormap = [
-                #         [117, 255, 68, 0],  # Car: Green
-                #         [255, 118, 142, 0],  # Truck: Purple
-                #         [45, 151, 255, 0],  # Pedestrian: Dark Orange
-                #         [45, 204, 255, 0],  # Cyclist: Gold Orange
-                #     ]
-                #     count_array = data_loader.count_number(frame_results, frame_labels, view_region=v2x_region)
-                #     img = self.draw_legend(img, [1350, 63], './examples/icons/legends_v2x.png', 1.0)
-                #     img = self.draw_counts(img, count_number = count_array,
-                #         count_color = count_colormap, count_vertex = [1405, 54])
-                mlab.close()
-                return img
-            else:
-                return fig
+            return fig
+        else:
+            warnings.warn("No cloud..")
+            return fig
 
 
     def draw_me(self, img, car_vertex, car_path, car_ratio, height_delta = 20):
