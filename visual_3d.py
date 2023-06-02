@@ -1,5 +1,6 @@
 import os
 import cv2
+import math
 import numpy as np
 import data_loader
 from tqdm import tqdm
@@ -45,8 +46,10 @@ class Visual3D(object):
 
     def visualization(self, draw_status, draw_lists, draw_elements, save_path):
         import mayavi.mlab as mlab
+        mlab.options.offscreen = True
         if draw_status["draw_frame"]:
             frame_cloud_path = draw_lists["cloud_list"][0]
+            frame_cloud_name = frame_cloud_path.split("/")[-1]
             frame_results, frame_labels, frame_polys = None, None, None
             frame_voxel_path, frame_image_path = None, None
             if draw_status["draw_result"]:
@@ -61,19 +64,17 @@ class Visual3D(object):
                 frame_image_path = draw_lists["image_list"][0]
             frame_3d_fig = self.draw_3d_map(draw_status, frame_cloud_path, frame_results, 
                 frame_labels, frame_polys, frame_voxel_path, frame_image_path)
-            frame_3d_path = (frame_cloud_path.split('/')[-1]).split('.')[0] + '.png'
+            frame_3d_path = ""
             if os.path.isdir(save_path):
                 # If the directory is provided, the map is writed into the directory
-                frame_3d_fn = (frame_cloud_path.split('/')[-1]).split('.')[0] + '.png'
+                frame_3d_fn = frame_cloud_name.split('.')[0] + '.png'
                 frame_3d_path = os.path.join(save_path, frame_3d_fn)
             elif save_path.endswith('.png'):
                 # If the png path is provided, the map is save as the path
                 frame_3d_path = save_path
-            # print("Save fig: ", frame_3d_path)
-            print("Type of fig: ", type(frame_3d_fig))
-            mlab.show()
             mlab.savefig(frame_3d_path)
-            mlab.close()
+            # mlab.show()
+            mlab.clf()
         elif draw_status["draw_sequence"]:
             os.makedirs(save_path, exist_ok=True)
             print('Visualized Sequence Path: ', save_path)
@@ -94,10 +95,11 @@ class Visual3D(object):
                     frame_image_path = draw_lists["image_list"][i]
                 frame_3d_fig = self.draw_3d_map(draw_status, frame_cloud_path, frame_results, 
                     frame_labels, frame_polys, frame_voxel_path, frame_image_path)
-                frame_3d_fn = os.path.splitext(cloud_list[i])[0] + '.png'
-                mlab.savefig(os.path.join(args.visual, frame_3d_fn))
-                mlab.close()
-                sleep(0.05)
+                frame_3d_fn = os.path.splitext(frame_cloud_name)[0] + '.png'
+                mlab.savefig(os.path.join(save_path, frame_3d_fn))
+                mlab.clf()
+                # sleep(0.05)
+        mlab.close()
         return True
 
 
@@ -130,8 +132,8 @@ class Visual3D(object):
                     fig = self.draw_3d_polys(fig, vertices3d = poly_vertices3d)
                 if draw_status["draw_voxel"]:
                     voxel_color = tuple(np.array([216, 216, 216]) / 255)
-                    fig = self.draw_3d_voxels(fig, height_offset = -1.4, voxel_height = 1.7,
-                        voxel_path = voxel_path, voxel_color = voxel_color)
+                    fig = self.draw_3d_voxels(fig, voxel_path = frame_voxel_path, height_offset = -1.4,
+                        voxel_height = 1.7, voxel_color = voxel_color)
             if draw_status["draw_ground"]:
                 fig = self.draw_ground_plane(fig)
 
@@ -180,7 +182,6 @@ class Visual3D(object):
                 mlab.close()
                 return img
             else:
-                print("Return")
                 return fig
 
 
