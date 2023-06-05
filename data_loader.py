@@ -4,7 +4,7 @@ import numpy as np
 import pickle5 as pkl
 from tqdm import tqdm
 from pypcd import pypcd
-
+import rclone
 
 classes = [
     'Car',
@@ -41,6 +41,32 @@ cls_dict = {
     'fog'           : 'Unknown',
     'sign'          : 'Misc',
 }
+det_cls_dict = {
+    1 : 'Vehicle',
+    2 : 'Pedestrian',
+    3 : 'Cyclist', 
+    4 : 'Misc',
+}
+
+
+def check_file_path(file_path):
+    if file_path.startswith("tos://"):
+        with open(".rclone.conf") as f:
+            cfg = f.read()
+            result = rclone.with_config(cfg).ls(file_path)
+            if (result.get('code') == 0) and (result.get('out') == b''):
+                return False
+            else:
+                return True
+    else:
+        return os.path.exists(file_path)
+
+def download_remote_file(remote_path, local_path = None):
+    if local_path is None:
+        local_path = remote_path.split("/")[-1]
+    with open(".rclone.conf") as f:
+        cfg = f.read()
+        rclone.with_config(cfg).copy(remote_path, local_path)
 
 
 def load_cloud(cloud_path):
@@ -259,42 +285,144 @@ def load_single_poly(poly_path):
             poly_results[i]['polys'][key]=np.asarray(poly_results[i]['polys'][key])
     return poly_results
 
+
+def load_dir_result(det_dir, query_frame = None, sort_by_num = False):
+    result_dict = {}
+    det_list = os.listdir(det_dir)
+    if sort_by_num:
+        det_list = sorted(det_list, key=lambda x: int(x.split('.')[0]))
+    else:
+        det_list = sorted(det_list)
+
+    query_flag = False
+    for frame_id, det_fn in enumerate(det_list):
+        frame_name  = os.path.splitext(os.path.basename(det_fn))[0] # Split the extension of frame name
+        det_path = os.path.join(det_dir, det_fn)
+        if not query_frame is None:
+            if not query_frame in det_fn:
+                continue
+            else:
+                query_flag = True
+                print("Query frame {} is in result directory".format(query_frame))
+        result_dict[frame_name] = {'dets': {}}
+        with open(det_path, 'r') as f:
+            det_lines = f.readlines()
+            for det_ln in det_lines:
+                det_type, det_box, det_score, det_iou, det_track = load_line(det_ln)
+                if 'det_box' in result_dict[frame_id]['dets']:
+                    result_dict[frame_name]['dets']['det_box'].append(det_box)
+                else:
+                    result_dict[frame_name]['dets']['det_box'] = [det_box]
+                if 'name' in result_dict[frame_id]['dets']:
+                    result_dict[frame_name]['dets']['name'].append(det_type)
+                else:
+                    result_dict[frame_name]['dets']['name'] = [det_type]
+                if 'score' in result_dict[frame_id]['dets']:
+                    result_dict[frame_name]['dets']['score'].append(det_score)
+                else:
+                    result_dict[frame_name]['dets']['score'] = [det_score]
+                if det_track is not None:
+                    if 'track_info' in results[frame_id]['dets']:
+                        result_dict[frame_name]['dets']['track_info'].append(det_track)
+                    else:
+                        result_dict[frame_name]['dets']['track_info'] = [det_track]
+    for frame_name, frame_det in result_dict.items():
+        for key in frame_det['dets']:
+            frame_det['dets'][key] = np.array(frame_det['dets'][key])
+    if not query_frame is None:
+        if not query_flag:
+            print("Query frame NOT in result pkl".format(query_frame))
+    return result_dict
+
+
+
+def load_pkl_result(pkl_result_path, query_frame = None, sort_by_num = False):
+    result_dict = {}
+    query_flag = False
+
+    with open(pkl_result_path, 'rb') as f:
+        pkl_results = pkl.load(f)
+        for dataset_name, dataset_results in pkl_results.items():            
+            for frame_name, frame_result in dataset_results.items():
+                if not query_frame is None:
+                    if not query_frame in frame_name:
+                        continue
+                    else:
+                        query_flag = True
+                        print("Query frame {} is in result pkl".format(query_frame))
+                result_dict[frame_name] = {'dets': {}}
+                for i, det_result in enumerate(frame_result):
+                    det_type = det_cls_dict[det_result['lbl']]
+                    det_locations = [float(det_result['x']), float(det_result['y']), float(det_result['z'])]
+                    det_dimensions = [float(det_result['width']), float(det_result['length']), float(det_result['height'])]
+                    det_rotation_y = float(det_result['rotation_y'])
+                    det_score = float(det_result['prob'])
+                    det_box = det_locations + det_dimensions + det_rotation_y
+                    if 'det_box' in result_dict[frame_name]['dets']:
+                        result_dict[frame_name]['dets']['det_box'].append(det_box)
+                    else:
+                        result_dict[frame_name]['dets']['det_box'] = [det_box]
+                    if 'name' in result_dict[frame_name]['dets']:
+                        result_dict[frame_name]['dets']['name'].append(det_type)
+                    else:
+                        result_dict[frame_name]['dets']['name'] = [det_type]
+                    if 'score' in result_dict[frame_name]['dets']:
+                        result_dict[frame_name]['dets']['score'].append(det_score)
+                    else:
+                        result_dict[frame_name]['dets']['score'] = [det_score]
+
+    for frame_name, frame_det in result_dict.items():
+        for key in frame_det['dets']:
+            frame_det['dets'][key] = np.array(frame_det['dets'][key])
+    if not query_frame is None:
+        if not query_flag:
+            print("Query frame NOT in result pkl".format(query_frame))
+    return result_dict
+
+
 def load_single_label(label_path):
     '''
         Load labels from single frame
     '''
-    labels = [{'annos': {}} for i in range(1)]
+    # labels = [{'annos': {}} for i in range(1)]
+    frame_name = os.path.splitext(os.path.basename(label_path))[0]
+    label_dict = {}
+    label_dict[frame_name] = {"annos" : {}}
     with open(label_path, 'r') as f:
         label_lines = f.readlines()
         for label_ln in label_lines:
             label_type, label_box, label_score, label_iou, label_track = load_line(label_ln)
-            if 'gt_box' in labels[0]['annos']:
-                labels[0]['annos']['gt_box'].append(label_box)
-            else:
-                labels[0]['annos']['gt_box'] = [label_box]
-            if 'name' in labels[0]['annos']:
-                labels[0]['annos']['name'].append(label_type)
-            else:
-                labels[0]['annos']['name'] = [label_type]
-            if label_track is not None:
-                if 'track_info' in labels[0]['annos']:
-                    labels[0]['annos']['track_info'].append(label_track)
-                else:
-                    labels[0]['annos']['track_info'] = [label_track]
 
-    for i in range(len(labels)):
-        for key in labels[i]['annos']:
-            labels[i]['annos'][key] = np.array(labels[i]['annos'][key])
-    return labels
+            # Append the annotation to label_dict
+            if 'gt_box' in label_dict[frame_name]['annos']:
+                label_dict[frame_name]['annos']['gt_box'].append(label_box)
+            else:
+                label_dict[frame_name]['annos']['gt_box'] = [label_box]
+            if 'name' in label_dict[frame_name]['annos']:
+                label_dict[frame_name]['annos']['name'].append(label_type)
+            else:
+                label_dict[frame_name]['annos']['name'] = [label_type]
+            if label_track is not None:
+                if 'track_info' in label_dict[frame_name]['annos']:
+                    label_dict[frame_name]['annos']['track_info'].append(label_track)
+                else:
+                    label_dict[frame_name]['annos']['track_info'] = [label_track]
+
+    for frame_name, frame_anno in label_dict.items():
+        for key in frame_anno:
+            frame_anno[key] = np.array(frame_anno[key])
+    return label_dict
+
 
 def load_pkl_label(pkl_label_path, query_frame = None, sort_by_num = False):
+    label_dict = {}
     annotation_cls = list(cls_dict.keys())
     with open(pkl_label_path, 'rb') as f:
         pkl_labels = pkl.load(f)
-        max_frames = len(pkl_labels)
-        labels = [{'annos': {}} for i in range(max_frames)]
+        # max_frames = len(pkl_labels)
+        # labels = [{'annos': {}} for i in range(max_frames)]
+
         # Scan each frame
-        frame_id = 0
         query_flag = False
         for frame_name, frame_label in tqdm(pkl_labels.items()):
             if not query_frame is None:
@@ -303,6 +431,7 @@ def load_pkl_label(pkl_label_path, query_frame = None, sort_by_num = False):
                 else:
                     query_flag = True
                     print("Query frame {} is in label pkl".format(query_frame))
+            label_dict[frame_name] = {"annos" : {}}
             for i, anno in enumerate(frame_label):
                 anno_type = cls_dict[anno['original_lbl'].lower()]
                 # anno_dimensions = [anno['height'], anno['width'], anno['length']]
@@ -315,33 +444,39 @@ def load_pkl_label(pkl_label_path, query_frame = None, sort_by_num = False):
                         anno_type = 'Truck'
                     else:
                         anno_type = 'Car'
-                if 'gt_box' in labels[frame_id]['annos']:
-                    labels[frame_id]['annos']['gt_box'].append(anno_box3d)
+                # Append the annotation to label_dict
+                if 'gt_box' in label_dict[frame_name]['annos']:
+                    label_dict[frame_name]['annos']['gt_box'].append(anno_box3d)
                 else:
-                    labels[frame_id]['annos']['gt_box'] = [anno_box3d]
-                if 'name' in labels[frame_id]['annos']:
-                    labels[frame_id]['annos']['name'].append(anno_type)
+                    label_dict[frame_name]['annos']['gt_box'] = [anno_box3d]
+                if 'name' in label_dict[frame_id]['annos']:
+                    label_dict[frame_name]['annos']['name'].append(anno_type)
                 else:
-                    labels[frame_id]['annos']['name'] = [anno_type]
-            frame_id += 1
-        for i in range(len(labels)):
-            for key in labels[i]['annos']:
-                labels[i]['annos'][key] = np.array(labels[i]['annos'][key])
+                    label_dict[frame_name]['annos']['name'] = [anno_type]
+
+
+        for frame_name, frame_anno in label_dict.items():
+            for key in frame_anno:
+                frame_anno[key] = np.array(frame_anno[key])
         if not query_frame is None:
             if not query_flag:
                 print("Query frame NOT in label pkl".format(query_frame))
+
         return labels
 
 def load_dir_label(label_dir, query_frame = None, sort_by_num = False):
+    label_dict = {}
     label_list = os.listdir(label_dir)
     if sort_by_num:
         label_list = sorted(label_list, key=lambda x: int(x.split('.')[0]))
     else:
         label_list = sorted(label_list)
     max_frames = len(label_list)
-    labels = [{'annos': {}} for i in range(max_frames)]
+    # labels = [{'annos': {}} for i in range(max_frames)]
+
     query_flag = False
     for frame_id, label_fn in enumerate(label_list):
+        frame_name  = os.path.splitext(os.path.basename(label_fn))[0] # Split the extension of frame name
         label_path = os.path.join(label_dir, label_fn)
         if not query_frame is None:
             if not query_frame in label_fn:
@@ -349,30 +484,34 @@ def load_dir_label(label_dir, query_frame = None, sort_by_num = False):
             else:
                 query_flag = True
                 print("Query frame {} is in label directory".format(query_frame))
+        label_dict[frame_name] = {"annos" : {}}
         with open(label_path, 'r') as f:
             label_lines = f.readlines()
             for label_ln in label_lines:
                 label_type, label_box, label_score, label_iou, label_track = load_line(label_ln)
-                if 'gt_box' in labels[frame_id]['annos']:
-                    labels[frame_id]['annos']['gt_box'].append(label_box)
+                # Append the annotation to label_dict
+                if 'gt_box' in label_dict[frame_name]['annos']:
+                    label_dict[frame_name]['annos']['gt_box'].append(label_box)
                 else:
-                    labels[frame_id]['annos']['gt_box'] = [label_box]
-                if 'name' in labels[frame_id]['annos']:
-                    labels[frame_id]['annos']['name'].append(label_type)
+                    label_dict[frame_name]['annos']['gt_box'] = [label_box]
+                if 'name' in label_dict[frame_name]['annos']:
+                    label_dict[frame_name]['annos']['name'].append(label_type)
                 else:
-                    labels[frame_id]['annos']['name'] = [label_type]
+                    label_dict[frame_name]['annos']['name'] = [label_type]
                 if label_track is not None:
-                    if 'track_info' in labels[frame_id]['annos']:
-                        labels[frame_id]['annos']['track_info'].append(label_track)
+                    if 'track_info' in label_dict[frame_name]['annos']:
+                        label_dict[frame_name]['annos']['track_info'].append(label_track)
                     else:
-                        labels[frame_id]['annos']['track_info'] = [label_track]
-    for i in range(len(labels)):
-        for key in labels[i]['annos']:
-            labels[i]['annos'][key] = np.array(labels[i]['annos'][key])
+                        label_dict[frame_name]['annos']['track_info'] = [label_track]
+    for frame_name, frame_anno in label_dict.items():
+        for key in frame_anno:
+            frame_anno[key] = np.array(frame_anno[key])
     if not query_frame is None:
         if not query_flag:
             print("Query frame NOT in label directory".format(query_frame))
-    return labels
+
+    # print("Label Dict: ", label_dict)
+    return label_dict
 
 
 def load_polys(poly_dir, sort_by_num = False):
@@ -412,42 +551,22 @@ def load_polys(poly_dir, sort_by_num = False):
             poly_results[i]['polys'][key] = np.array(poly_results[i]['polys'][key])
     return poly_results
 
-def load_results(det_dir, sort_by_num = False):
-    det_list = os.listdir(det_dir)
-    if sort_by_num:
-        det_list = sorted(det_list, key=lambda x: int(x.split('.')[0]))
-    else:
-        det_list = sorted(det_list)
-    max_frames = len(det_list)
-    results = [{'dets': {}} for i in range(max_frames)]
-    for frame_id, det_fn in enumerate(det_list):
-        det_path = os.path.join(det_dir, det_fn)
-        with open(det_path, 'r') as f:
-            det_lines = f.readlines()
-            for det_ln in det_lines:
-                det_type, det_box, det_score, det_iou, det_track = load_line(det_ln)
-                if 'det_box' in results[frame_id]['dets']:
-                    results[frame_id]['dets']['det_box'].append(det_box)
-                else:
-                    results[frame_id]['dets']['det_box'] = [det_box]
-                if 'name' in results[frame_id]['dets']:
-                    results[frame_id]['dets']['name'].append(det_type)
-                else:
-                    results[frame_id]['dets']['name'] = [det_type]
-                if 'score' in results[frame_id]['dets']:
-                    results[frame_id]['dets']['score'].append(det_score)
-                else:
-                    results[frame_id]['dets']['score'] = [det_score]
-                if det_track is not None:
-                    if 'track_info' in results[frame_id]['dets']:
-                        results[frame_id]['dets']['track_info'].append(det_track)
-                    else:
-                        results[frame_id]['dets']['track_info'] = [det_track]
 
-    for i in range(len(results)):
-        for key in results[i]['dets']:
-            results[i]['dets'][key] = np.array(results[i]['dets'][key])
-    return results
+def load_results(result_pth, query_frame = None, sort_by_num = False):
+    if os.path.isdir(result_pth):
+        labels = load_dir_result(result_pth, query_frame)
+        return labels
+    elif os.path.isfile(result_pth):
+        if label_pth.endswith('.pkl'):
+            labels = load_pkl_result(result_pth, query_frame)
+            return labels
+        elif label_pth.endswith('.txt'):
+            labels = load_single_result(result_pth)
+            return labels
+    else:
+        raise TypeError('Cannot load labels')
+        return None    
+
 
 def load_labels(label_pth, query_frame = None, sort_by_num = False):
     if os.path.isdir(label_pth):

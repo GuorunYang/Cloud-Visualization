@@ -2,6 +2,7 @@ import os
 import cv2
 import math
 import time
+import warnings
 import numpy as np
 import data_loader
 from tqdm import tqdm
@@ -52,19 +53,19 @@ class Visual3D(object):
         fig = mlab.figure(figure=None, bgcolor=(0, 0, 0), fgcolor=None, engine=None, size=(1600, 1000))
         if draw_status["draw_frame"]:
             frame_cloud_path = draw_lists["cloud_list"][0]
-            frame_cloud_name = frame_cloud_path.split("/")[-1]
             frame_results, frame_labels, frame_polys = None, None, None
             frame_voxel_path, frame_image_path = None, None
+            frame_name = os.path.splitext(os.path.basename(frame_cloud_path))[0]
             if draw_status["draw_result"]:
-                frame_results = draw_elements["results"][0]
+                frame_results = draw_elements["results"][frame_name]
             if draw_status["draw_label"]:
-                frame_labels = draw_elements["labels"][0]
-            if draw_status["draw_poly"]:
-                frame_polys = draw_elements["polys"][0]
-            if draw_status["draw_voxel"]:
-                frame_voxel_path = draw_lists["voxel_list"][0]
-            if draw_status["draw_image"]:
-                frame_image_path = draw_lists["image_list"][0]
+                frame_labels = draw_elements["labels"][frame_name]
+            # if draw_status["draw_poly"]:
+            #     frame_polys = draw_elements["polys"][frame_name]
+            # if draw_status["draw_voxel"]:
+            #     frame_voxel_path = draw_lists["voxel_list"][frame_name]
+            # if draw_status["draw_image"]:
+            #     frame_image_path = draw_lists["image_list"][frame_name]
             fig = self.draw_3d_map(fig, draw_status, frame_cloud_path, frame_results, 
                 frame_labels, frame_polys, frame_voxel_path, frame_image_path)
             if draw_status["debug"]:
@@ -81,7 +82,7 @@ class Visual3D(object):
             mlab.savefig(frame_3d_path)
             print("Rendering image saves to {}".format(frame_3d_path))
             mlab.clf(figure=fig)
-        elif draw_status["draw_sequence"]:
+        elif draw_status["draw_sequence"]:            
             os.makedirs(save_path, exist_ok=True)
             print('Visualized Sequence Path: ', save_path)
             for i in tqdm(range(len(draw_lists["cloud_list"]))):
@@ -89,16 +90,23 @@ class Visual3D(object):
                 frame_cloud_name = frame_cloud_path.split("/")[-1]
                 frame_results, frame_labels, frame_polys = None, None, None
                 frame_voxel_path, frame_image_path = None, None
+                frame_name = os.path.splitext(os.path.basename(frame_cloud_path))[0]
                 if draw_status["draw_result"]:
-                    frame_results = draw_elements["results"][i]
+                    if frame_name in draw_elements["results"]:
+                        frame_results = draw_elements["results"][frame_name]
+                    else:
+                        warnings.warn("Cannot find frame {} in results".format(frame_name))
                 if draw_status["draw_label"]:
-                    frame_labels = draw_elements["labels"][i]
-                if draw_status["draw_poly"]:
-                    frame_polys = draw_elements["polys"][i]
-                if draw_status["draw_voxel"]:
-                    frame_voxel_path = draw_lists["voxel_list"][i]
-                if draw_status["draw_image"]:
-                    frame_image_path = draw_lists["image_list"][i]
+                    if frame_name in draw_elements["labels"]:
+                        frame_labels = draw_elements["labels"][frame_name]
+                    else:
+                        warnings.warn("Cannot find frame {} in labels".format(frame_name))
+                # if draw_status["draw_poly"]:
+                #     frame_polys = draw_elements["polys"][i]
+                # if draw_status["draw_voxel"]:
+                #     frame_voxel_path = draw_lists["voxel_list"][i]
+                # if draw_status["draw_image"]:
+                #     frame_image_path = draw_lists["image_list"][i]
                 fig = self.draw_3d_map(fig, draw_status, frame_cloud_path, frame_results, 
                     frame_labels, frame_polys, frame_voxel_path, frame_image_path)
                 if draw_status["debug"]:

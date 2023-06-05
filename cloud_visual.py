@@ -36,6 +36,7 @@ def get_colormap():
     ]
     return colormap
 
+
 def check_args(args):
     '''
         Check the input arguments and set the status
@@ -65,7 +66,21 @@ def check_args(args):
         "npy_cloud" : False,
     }
     cloud_list = []
-    # Step 1: Check the cloud
+    # Step 1: Check the cloud and load clou list
+    if args.cloud is not None:
+        if data_loader.check_file_path(args.cloud):
+            print("Cloud {} exist".format(args.cloud))
+            if args.cloud.startswith("tos://"):
+                local_cloud_path = os.path.join(args.save, "cloud")
+                print("Downloading cloud from {} to {} ...".format(args.cloud, local_cloud_path))
+                data_loader.download_remote_file(args.cloud, local_cloud_path)
+                print("Download Finish")
+                args.cloud = local_cloud_path
+        else:
+            warnings.warn("Cannot find cloud from {}".format(args.cloud))
+    else:
+        warnings.warn("Argument cloud is not provided!!!")
+
     if os.path.isdir(args.cloud):
         draw_status["draw_sequence"] = True
         cloud_list = sorted(os.listdir(args.cloud))
@@ -82,7 +97,7 @@ def check_args(args):
                     cloud_format["bin_cloud"] = True
                 elif cloud_list[i].endswith('pcd'):
                     cloud_format["pcd_cloud"] = True
-                elif cloud_list[i].endswith('txt'):\
+                elif cloud_list[i].endswith('txt'):
                     cloud_format["txt_cloud"] = True
                 draw_status["draw_cloud"] = True
     elif os.path.isfile(args.cloud):
@@ -108,95 +123,38 @@ def check_args(args):
 
     # Step 2: Check the result
     if args.result is not None:
-        if draw_status["draw_sequence"] and os.path.isdir(args.result):
-            result_list = sorted(os.listdir(args.result))
-            if len(result_list) == len(cloud_list):
-                draw_status["draw_result"] = True
-            else:
-                warnings.warn('The results are not matching the clouds')
-        elif draw_status["draw_frame"] and os.path.isfile(args.result):
+        if data_loader.check_file_path(args.result):
             draw_status["draw_result"] = True
         else:
-            warnings.warn('The results are not matching the clouds')
+            draw_status["draw_result"] = False
 
     # Step 3: Check the label
     if args.label is not None:
-        if draw_status["draw_sequence"]:
-            if os.path.isdir(args.label):
-                label_list = sorted(os.listdir(args.label))
-                if len(label_list) == len(cloud_list):
-                    draw_status["draw_label"] = True
-                else:
-                    warnings.warn("The label number {} != cloud number {}".format(
-                        len(label_list), len(cloud_list)))
-            elif args.label.endswith(".pkl"):
-                with open(args.label, "rb") as f:
-                    label_dict = pkl.load(f)
-                    if len(label_dict) == len(cloud_list):
-                        draw_status["draw_label"] = True
-                    else:
-                        warnings.warn("The label number {} != cloud number {}".format(
-                            len(label_dict), len(cloud_list)))
-            else:
-                warnings.warn('The labels are not matching the clouds')
-        elif draw_status["draw_frame"]:
-            if os.path.isdir(args.label) or (os.path.isfile(args.label) and args.label.endswith(".pkl")):
-                draw_status["draw_label"] = True
-            # if os.path.isdir(args.label):
-            #     label_list = sorted(os.listdir(args.label))
-            #     if len(label_list) == len(cloud_list):
-            #         draw_status["draw_label"] = True
-            #     else:
-            #         warnings.warn("The label number {} != cloud number".format(len(label_list)))
-            # elif args.label.endswith(".pkl"):
-            #      with open(args.label, "rb") as f:
-            #         label_dict = pkl.load(f)
-            #         frame_name = os.path.splitext(args.cloud.split("/")[-1])[0]
-            #         if frame_name in label_dict:
-            #             draw_status["draw_label"] = True
-            #         else:
-            #             warnings.warn("The cloud frame {} NOT in label pkl".format(frame_name))
+        if data_loader.check_file_path(args.label):
+            draw_status["draw_label"] = True
         else:
-            warnings.warn('The labels are not matching the clouds')
+            draw_status["draw_label"] = False
 
     # Step 4: Check the poly
     if args.poly is not None:
-        if draw_status["draw_sequence"] and os.path.isdir(args.poly):
-            poly_list = sorted(os.listdir(args.poly))
-            if len(poly_list) == len(cloud_list):
-                draw_status["draw_poly"] = True
-            else:
-                warnings.warn('The polygon results are not matching the clouds')
-        elif draw_status["draw_frame"] and os.path.isfile(args.poly):
+        if data_loader.check_file_path(args.poly):
             draw_status["draw_poly"] = True
         else:
-            warnings.warn('The polygon results are not matching the clouds')
+            draw_status["draw_poly"] = False
 
     # Step 5: Check the voxel
     if args.voxel is not None:
-        if draw_status["draw_sequence"] and os.path.isdir(args.voxel):
-            voxel_list = sorted(os.listdir(args.voxel))
-            if len(voxel_list) == len(cloud_list):
-                draw_status["draw_voxel"] = True
-            else:
-                warnings.warn('The voxel maps are not matching the clouds')
-        elif draw_status["draw_frame"] and os.path.isfile(args.voxel):
+        if data_loader.check_file_path(args.voxel):
             draw_status["draw_voxel"] = True
         else:
-            warnings.warn('The voxel maps are not matching the clouds')
+            draw_status["draw_voxel"] = False
 
     # Step 6: Check the image
     if args.image is not None:
-        if draw_status["draw_sequence"] and os.path.isdir(args.image):
-            image_list = sorted(os.listdir(args.image))
-            if len(image_list) == len(cloud_list):
-                draw_status["draw_image"] = True
-            else:
-                warnings.warn('The images are not matching the clouds')
-        elif draw_status["draw_frame"] and os.path.isfile(args.image):
+        if data_loader.check_file_path(args.image):
             draw_status["draw_image"] = True
         else:
-            warnings.warn('The images are not matching the clouds')
+            draw_status["draw_image"] = False
 
     # Step 7: Check other flags
     if args.colorize_by_intensity:
@@ -207,7 +165,6 @@ def check_args(args):
         draw_status["draw_ground"] = True
     if args.debug:
         draw_status["debug"] = True
-
     return draw_status, cloud_format
 
 def set_views(args):
@@ -262,9 +219,9 @@ def get_draw_list(args, draw_status):
         if draw_status["draw_image"]:
             draw_lists["image_list"] = data_loader.get_image_list(args.image, args.sort_by_num)
         if draw_status["draw_result"]:
-            draw_elements["results"] = data_loader.load_results(args.result, args.sort_by_num)
+            draw_elements["results"] = data_loader.load_results(args.result, None, args.sort_by_num)
         if draw_status["draw_label"]:
-            draw_elements["labels"] = data_loader.load_labels(args.label, args.sort_by_num)
+            draw_elements["labels"] = data_loader.load_labels(args.label, None, args.sort_by_num)
         if draw_status["draw_poly"]:
             draw_elements["polys"] = data_loader.load_polys(args.poly, args.sort_by_num)
     return draw_lists, draw_elements
@@ -279,6 +236,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--poly', type=str, default=None, help='Polygon result path (file or directory)')
     parser.add_argument('-v', '--voxel', type=str, default=None, help='Voxel map path (file or directory)')
 
+    parser.add_argument('--save', type=str, default='./', help='Save path for remote data')    
     parser.add_argument('--visual', type=str, default='visual_image', help='Save path for BEV or 3D maps (file or directory)')
     parser.add_argument('--viewpoint',type=str, default='Vehicle', help='View points (Vehicle, V2X)')
     parser.add_argument('--draw_3d', action='store_true', default=False, help='Draw 3D maps')
