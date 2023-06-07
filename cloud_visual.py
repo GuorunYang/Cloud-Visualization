@@ -77,9 +77,9 @@ def check_args(args):
                 print("Download Finish")
                 args.cloud = local_cloud_path
         else:
-            warnings.warn("Cannot find cloud from {}".format(args.cloud))
+            print("Cannot find cloud from {}".format(args.cloud))
     else:
-        warnings.warn("Argument cloud is not provided!!!")
+        print("Argument cloud is not provided!!!")
 
     if os.path.isdir(args.cloud):
         draw_status["draw_sequence"] = True
@@ -131,6 +131,13 @@ def check_args(args):
     # Step 3: Check the label
     if args.label is not None:
         if data_loader.check_file_path(args.label):
+            label_fn = os.path.basename(args.label)
+            local_label_dir = os.path.join(args.save, "label")
+            print("Downloading cloud from {} to {} ...".format(args.label, local_label_dir))
+            data_loader.download_remote_file(args.label, local_label_dir)
+            local_lobal_path = os.path.join(local_label_dir, label_fn)
+            print("Download Finish")
+            args.label = local_lobal_path
             draw_status["draw_label"] = True
         else:
             draw_status["draw_label"] = False
@@ -253,6 +260,7 @@ if __name__ == '__main__':
     colormap = get_colormap()
     area_scope, det_scope, voxel_size = set_views(args)
     draw_status, cloud_format = check_args(args)
+    print("Draw Status: ", draw_status)
     draw_lists, draw_elements = get_draw_list(args, draw_status)
 
     if not args.draw_3d:

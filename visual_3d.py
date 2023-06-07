@@ -36,6 +36,13 @@ class Visual3D(object):
             [255, 64, 64],    # 10 Road_Intrusion_Object: Brown1
             [255, 0, 255],    # 11 Animal: Magenta
         ]
+        self.score_thresh = [
+            0.3, 
+            0.35,
+            0.35, 
+            0.3,
+            0.35
+        ]
         if not voxel_size is None:
             self.voxel_size = voxel_size
         if not area_scope is None:
@@ -71,14 +78,16 @@ class Visual3D(object):
             if draw_status["debug"]:
                 mlab.show()
             # Save the image
-            frame_3d_path = ""
+            frame_3d_path = (frame_cloud_path.split('/')[-1]).split('.')[0] + '.png'
             if os.path.isdir(save_path):
                 # If the directory is provided, the map is writed into the directory
-                frame_3d_fn = frame_cloud_name.split('.')[0] + '.png'
+                frame_3d_fn = (frame_cloud_path.split('/')[-1]).rsplit('.', 1)[0] + '.png'
                 frame_3d_path = os.path.join(save_path, frame_3d_fn)
             elif save_path.endswith('.png'):
                 # If the png path is provided, the map is save as the path
                 frame_3d_path = save_path
+            else:
+                print('Please check the path of save image: {}. Maybe the directory does not exist or the file exists already'.format(frame_bev_path))
             mlab.savefig(frame_3d_path)
             print("Rendering image saves to {}".format(frame_3d_path))
             mlab.clf(figure=fig)
@@ -220,7 +229,7 @@ class Visual3D(object):
             if scores is None:
                 mask = (labels == cur_label)
             else:
-                mask = (labels == cur_label) & (scores > score_thresh[cur_label])
+                mask = (labels == cur_label) & (scores > self.score_thresh[cur_label])
             if mask.sum() == 0:
                 continue
             # Draw 3D boxes

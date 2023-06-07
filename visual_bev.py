@@ -29,6 +29,13 @@ class VisualBEV(object):
             [255, 64, 64],    # 10 Road_Intrusion_Object: Brown1
             [255, 0, 255],    # 11 Animal: Magenta
         ]
+        self.score_thresh = [
+            0.3, 
+            0.35,
+            0.35, 
+            0.3,
+            0.35
+        ]
         if not voxel_size is None:
             self.voxel_size = voxel_size
         if not area_scope is None:
@@ -73,6 +80,8 @@ class VisualBEV(object):
                 # If the png path is provided, the map is save as the path
                 frame_bev_path = save_path
                 print('Visualized Frame Path: ', frame_bev_path)
+            else:
+                print('Please check the path of save image: {}. Maybe the directory does not exist or the file exists already'.format(frame_bev_path))
             if not cv2.imwrite(frame_bev_path, frame_bev_map):
                 print('Write Image Error! Please check the path!')
                 return False
@@ -102,6 +111,7 @@ class VisualBEV(object):
                 #     frame_voxel_path = draw_lists["voxel_list"][i]
                 # if draw_status["draw_image"]:
                 #     frame_image_path = draw_lists["image_list"][i]
+                # print("Frame labels: ", frame_labels)
                 frame_bev_map = self.draw_bev_map(draw_status, frame_cloud_path, frame_results, frame_labels, 
                     frame_polys, frame_voxel_path, frame_image_path)
                 if draw_status["draw_scale"]:
@@ -514,7 +524,7 @@ class VisualBEV(object):
             if scores is None:
                 mask = (labels == cur_label)
             else:
-                mask = (labels == cur_label) & (scores > score_thresh[cur_label])
+                mask = (labels == cur_label) & (scores > self.score_thresh[cur_label])
             if mask.sum() == 0:
                 continue
             masked_track_ids = None

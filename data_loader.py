@@ -355,9 +355,16 @@ def load_pkl_result(pkl_result_path, query_frame = None, sort_by_num = False):
                     det_type = det_cls_dict[det_result['lbl']]
                     det_locations = [float(det_result['x']), float(det_result['y']), float(det_result['z'])]
                     det_dimensions = [float(det_result['width']), float(det_result['length']), float(det_result['height'])]
-                    det_rotation_y = float(det_result['rotation_y'])
+                    # det_rotation_y = [float(det_result['rotation_y'])]
+                    det_rotation_y = [np.pi / 2.0 - det_result['rotation_y'] + np.pi]
                     det_score = float(det_result['prob'])
                     det_box = det_locations + det_dimensions + det_rotation_y
+                    if det_type == 'Vehicle':
+                        if det_result['length'] >= 6.0:
+                            det_type = 'Truck'
+                        else:
+                            det_type = 'Car'
+
                     if 'det_box' in result_dict[frame_name]['dets']:
                         result_dict[frame_name]['dets']['det_box'].append(det_box)
                     else:
@@ -409,8 +416,9 @@ def load_single_label(label_path):
                     label_dict[frame_name]['annos']['track_info'] = [label_track]
 
     for frame_name, frame_anno in label_dict.items():
-        for key in frame_anno:
-            frame_anno[key] = np.array(frame_anno[key])
+        if 'annos' in frame_anno.keys():
+            for key in frame_anno['annos']:
+                frame_anno['annos'][key] = np.array(frame_anno['annos'][key])
     return label_dict
 
 
@@ -449,20 +457,20 @@ def load_pkl_label(pkl_label_path, query_frame = None, sort_by_num = False):
                     label_dict[frame_name]['annos']['gt_box'].append(anno_box3d)
                 else:
                     label_dict[frame_name]['annos']['gt_box'] = [anno_box3d]
-                if 'name' in label_dict[frame_id]['annos']:
+                if 'name' in label_dict[frame_name]['annos']:
                     label_dict[frame_name]['annos']['name'].append(anno_type)
                 else:
                     label_dict[frame_name]['annos']['name'] = [anno_type]
 
-
         for frame_name, frame_anno in label_dict.items():
-            for key in frame_anno:
-                frame_anno[key] = np.array(frame_anno[key])
+            if 'annos' in frame_anno.keys():
+                for key in frame_anno['annos']:
+                    frame_anno['annos'][key] = np.array(frame_anno['annos'][key])
         if not query_frame is None:
             if not query_flag:
                 print("Query frame NOT in label pkl".format(query_frame))
 
-        return labels
+        return label_dict
 
 def load_dir_label(label_dir, query_frame = None, sort_by_num = False):
     label_dict = {}
@@ -504,8 +512,9 @@ def load_dir_label(label_dir, query_frame = None, sort_by_num = False):
                     else:
                         label_dict[frame_name]['annos']['track_info'] = [label_track]
     for frame_name, frame_anno in label_dict.items():
-        for key in frame_anno:
-            frame_anno[key] = np.array(frame_anno[key])
+        if 'annos' in frame_anno.keys():
+            for key in frame_anno['annos']:
+                frame_anno['annos'][key] = np.array(frame_anno['annos'][key])
     if not query_frame is None:
         if not query_flag:
             print("Query frame NOT in label directory".format(query_frame))
@@ -554,15 +563,15 @@ def load_polys(poly_dir, sort_by_num = False):
 
 def load_results(result_pth, query_frame = None, sort_by_num = False):
     if os.path.isdir(result_pth):
-        labels = load_dir_result(result_pth, query_frame)
-        return labels
+        results = load_dir_result(result_pth, query_frame)
+        return results
     elif os.path.isfile(result_pth):
-        if label_pth.endswith('.pkl'):
-            labels = load_pkl_result(result_pth, query_frame)
-            return labels
+        if result_pth.endswith('.pkl'):
+            results = load_pkl_result(result_pth, query_frame)
+            return results
         elif label_pth.endswith('.txt'):
-            labels = load_single_result(result_pth)
-            return labels
+            results = load_single_result(result_pth)
+            return results
     else:
         raise TypeError('Cannot load labels')
         return None    
