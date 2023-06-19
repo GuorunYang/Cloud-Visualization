@@ -179,8 +179,8 @@ def set_views(args):
     # area_scope = [[-72, 92], [-72, 72], [-5, 5]]
     # det_scope = [[-60, 60], [-60, 60]]
 
-    area_scope = [[-60, 220], [-72, 72], [-5, 5]]
-    det_scope = [[-60, 220], [-72, 72]]
+    area_scope = [[-30, 300], [-72, 72], [-5, 5]]
+    det_scope = [[-30, 300], [-72, 72]]
     # if args.viewpoint.lower() == "vehicle":
     #     area_scope = [[-72, 92], [-72, 72], [-5, 5]]
     #     det_scope = [[-40, 80], [-60, 60]]
