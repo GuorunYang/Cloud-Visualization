@@ -60,6 +60,12 @@ cls_dict = {
     'motor'                 : 'Cyclist',
     'tricycle'              : 'Cyclist',
     'door'                  : 'Vehicle',
+    'bike'                  : 'Cyclist',
+    'unknownunmovable'      : 'Misc',
+    'boxtypetricyclist'     : 'Cyclist',
+    'boxtypetricycle'       : 'Cyclist',
+    'trolley'               : 'Cyclist',
+    'triangleroadblock'     : 'Misc',
 }
 det_cls_dict = {
     1 : 'Vehicle',
