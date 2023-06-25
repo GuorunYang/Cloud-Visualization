@@ -375,7 +375,7 @@ class Visual3D(object):
         voxel_boxes3d = np.zeros([index_array.shape[0], 8, 3], dtype = np.float)
         for i in range(index_array.shape[0]):
             voxel_row, voxel_col = index_array[i][0], index_array[i][1]
-            coor_x, coor_y = voxel2coor(voxel_row, voxel_col)
+            coor_x, coor_y = self.voxel2coor(voxel_row, voxel_col)
             # ground_height = float(voxel_image[voxel_row, voxel_col, 1]) / 255.0 * 20 + height_offset
             ground_height = height_offset
             voxel_vertices = np.array([

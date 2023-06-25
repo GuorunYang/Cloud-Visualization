@@ -40,6 +40,26 @@ cls_dict = {
     'warningpost'   : 'Misc',
     'fog'           : 'Unknown',
     'sign'          : 'Misc',
+    'mpv'           : 'Vehicle',
+    'car'           : 'Vehicle',
+    'bigboxtruck'   : 'Vehicle',
+    'smallboxtruck' : 'Vehicle',
+    'suv'           : 'Vehicle',
+    'truck'         : 'Vehicle',
+    'pickupcar'     : 'Vehicle',
+    'bus'           : 'Vehicle',
+    'ghost'         : 'Vehicle',
+    'crashbarrier'  : 'Misc',
+    'person'        : 'Pedestrian',
+    'warningtriangle'       : 'Misc',
+    'engineeringvehicle'    : 'Vehicle',
+    'unknownmovable'        : 'Vehicle',
+    'othercar'              : 'Vehicle',
+    'tralier'               : 'Vehicle',
+    'ignore'                : 'Unknown',
+    'motor'                 : 'Cyclist',
+    'tricycle'              : 'Cyclist',
+    'door'                  : 'Vehicle',
 }
 det_cls_dict = {
     1 : 'Vehicle',
@@ -70,22 +90,22 @@ def download_remote_file(remote_path, local_path = None):
 
 
 def load_cloud(cloud_path):
-	if cloud_path.endswith('.bin'):
-	    return np.fromfile(cloud_path, dtype=np.float32).reshape(-1, 5)
-	elif cloud_path.endswith('.pcd'):
-		pcd_cloud = pypcd.PointCloud.from_path(cloud_path)
-		points = np.zeros([pcd_cloud.width, 4], dtype=np.float32)
-		points[:, 0] = pcd_cloud.pc_data['x'].copy()
-		points[:, 1] = pcd_cloud.pc_data['y'].copy()
-		points[:, 2] = pcd_cloud.pc_data['z'].copy()
-		points[:, 3] = pcd_cloud.pc_data['intensity'].copy()
-		return points
-	elif cloud_path.endswith('.txt'):
-	    return np.loadtxt(cloud_path, dtype = np.float32)
-	elif cloud_path.endswith('.npy'):
-		return np.load(cloud_path, dtype = np.float32)
-	else:
-	    raise TypeError('Cannot support cloud format')
+    if cloud_path.endswith('.bin'):
+        return np.fromfile(cloud_path, dtype=np.float32).reshape(-1, 5)
+    elif cloud_path.endswith('.pcd'):
+        pcd_cloud = pypcd.PointCloud.from_path(cloud_path)
+        points = np.zeros([pcd_cloud.width, 4], dtype=np.float32)
+        points[:, 0] = pcd_cloud.pc_data['x'].copy()
+        points[:, 1] = pcd_cloud.pc_data['y'].copy()
+        points[:, 2] = pcd_cloud.pc_data['z'].copy()
+        points[:, 3] = pcd_cloud.pc_data['intensity'].copy()
+        return points
+    elif cloud_path.endswith('.txt'):
+        return np.loadtxt(cloud_path, dtype = np.float32)
+    elif cloud_path.endswith('.npy'):
+        return np.load(cloud_path).astype(np.float32)
+    else:
+        raise TypeError('Cannot support cloud format')
 
 def load_line(ln):
     '''
@@ -173,7 +193,7 @@ def load_line(ln):
         box3d = locations + dimensions + rotation_y
     elif len(line_array) == 14 or len(line_array) == 17 or len(line_array) == 18:
         # 7. MOT Label Version (Length = 18)
-        if line_array[1] in cls_array:
+        if line_array[1] in cls_dict:
             type = line_array[1]
         else:
             type = cls_dict[line_array[1]]
@@ -204,7 +224,7 @@ def load_poly_line(poly_ln):
     poly_vertices = None    # Poly Vertices
     if len(line_array) >= 18:
         object_id = [float(line_array[0])]
-        if line_array[1] in cls_array:
+        if line_array[1] in cls_dict:
             poly_type = line_array[1]
         else:
             poly_type = cls_dict[line_array[1]]
@@ -244,10 +264,10 @@ def load_single_result(det_path):
             else:
                 results[0]['dets']['score'] = [det_score]
             if det_track is not None:
-                if 'track_info' in labels[0]['dets']:
-                    labels[0]['dets']['track_info'].append(det_track)
+                if 'track_info' in results[0]['dets']:
+                    results[0]['dets']['track_info'].append(det_track)
                 else:
-                    labels[0]['dets']['track_info'] = [det_track]
+                    results[0]['dets']['track_info'] = [det_track]
 
     for i in range(len(results)):
         for key in results[i]['dets']:
@@ -322,7 +342,7 @@ def load_dir_result(det_dir, query_frame = None, sort_by_num = False):
                 else:
                     result_dict[frame_name]['dets']['score'] = [det_score]
                 if det_track is not None:
-                    if 'track_info' in results[frame_id]['dets']:
+                    if 'track_info' in result_dict[frame_name]['dets']:
                         result_dict[frame_name]['dets']['track_info'].append(det_track)
                     else:
                         result_dict[frame_name]['dets']['track_info'] = [det_track]
@@ -441,7 +461,12 @@ def load_pkl_label(pkl_label_path, query_frame = None, sort_by_num = False):
                     print("Query frame {} is in label pkl".format(query_frame))
             label_dict[frame_name] = {"annos" : {}}
             for i, anno in enumerate(frame_label):
-                anno_type = cls_dict[anno['original_lbl'].lower()]
+                anno_type = ''
+                try:
+                    anno_type = cls_dict[anno['original_lbl'].lower()]
+                except:
+                    print("Origin label : {} , New label : {}".format(anno['original_lbl'], anno['lbl']))
+                    continue
                 # anno_dimensions = [anno['height'], anno['width'], anno['length']]
                 anno_dimensions = [anno['width'], anno['length'], anno['height']]
                 anno_locations = [anno['x'], anno['y'], anno['z']]
@@ -569,7 +594,7 @@ def load_results(result_pth, query_frame = None, sort_by_num = False):
         if result_pth.endswith('.pkl'):
             results = load_pkl_result(result_pth, query_frame)
             return results
-        elif label_pth.endswith('.txt'):
+        elif result_pth.endswith('.txt'):
             results = load_single_result(result_pth)
             return results
     else:

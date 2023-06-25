@@ -216,7 +216,7 @@ def get_draw_list(args, draw_status):
         if draw_status["draw_label"]:
             draw_elements["labels"] = data_loader.load_labels(args.label, query_frame=query_frame)
         if draw_status["draw_poly"]:
-            draw_elements["polys"] = data_loader.oad_single_poly(args.poly)
+            draw_elements["polys"] = data_loader.load_single_poly(args.poly)
 
     elif draw_status["draw_sequence"]:
         if draw_status["draw_cloud"]:
