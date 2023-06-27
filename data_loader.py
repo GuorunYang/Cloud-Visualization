@@ -74,6 +74,38 @@ det_cls_dict = {
     4 : 'Misc',
 }
 
+colormap = [
+    # [0, 0, 0],
+    [68, 255, 117],     # 0 Car: Green
+    [255, 51, 51],      # 1 Pedestrian: Red
+    [255, 204, 45],     # 2 Cyclist: Gold Orange
+    [142, 118, 255],    # 3 Truck: Purple
+    [224, 224, 224],    # 4 Misc: Light Grey
+    [224, 224, 224],    # 5 Unknown: Light Grey
+    [190, 190, 190],    # 6 DontCare: Grey
+    [255, 215, 0],      # 7 Traffic_Warning_Object: Gold
+    [255, 192, 203],    # 8 Traffic_Warning_Sign: Pink
+    [255, 127, 36],    # 9 Road_Falling_Object: Chocolate1
+    [255, 64, 64],    # 10 Road_Intrusion_Object: Brown1
+    [255, 0, 255],    # 11 Animal: Magenta
+]
+
+# colormap = [
+#     [0, 0, 0],
+#     [68, 255, 117],     # 0 Car: Green
+#      # [255, 151, 45],  # 1 Pedestrian: Dark Orange
+#     [255, 51, 51],      # 1 Pedestrian: Red
+#     [255, 204, 45],     # 2 Cyclist: Gold Orange
+#     [142, 118, 255],    # 3 Truck: Purple
+#     [224, 224, 224],    # 4 Misc: Light Grey
+#     [224, 224, 224],    # 5 Unknown: Light Grey
+#     [190, 190, 190],    # 6 DontCare: Grey
+#     [255, 215, 0],      # 7 Traffic_Warning_Object: Gold
+#     [255, 192, 203],    # 8 Traffic_Warning_Sign: Pink
+#     [255, 127, 36],     # 9 Road_Falling_Object: Chocolate1
+#     [255, 64, 64],      # 10 Road_Intrusion_Object: Brown1
+#     [255, 0, 255],      # 11 Animal: Magenta
+# ]
 
 def check_file_path(file_path):
     if file_path.startswith("tos://"):

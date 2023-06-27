@@ -15,27 +15,7 @@ from visual_3d import Visual3D
 # score_thresh = [0, 0.64, 0.43, 0.55, 0.64]      # For Model V2.3
 # score_thresh = [0, 0.58, 0.44, 0.53, 0.63]      # For Model V2.5
 # score_thresh = [0, 0.62, 0.43, 0.55, 0.62]      # For Model V2.6
-
 v2x_region = [0, 40, -50, 50]
-def get_colormap():
-    # Classifications and color map
-    colormap = [
-        # [0, 0, 0],
-        [68, 255, 117],     # 0 Car: Green
-        [255, 51, 51],      # 1 Pedestrian: Red
-        [255, 204, 45],     # 2 Cyclist: Gold Orange
-        [142, 118, 255],    # 3 Truck: Purple
-        [238, 238, 0],      # 4 Cone: Yellow
-        [224, 224, 224],    # 5 Unknown: Light Grey
-        [190, 190, 190],    # 6 DontCare: Grey
-        [255, 215, 0],      # 7 Traffic_Warning_Object: Gold
-        [255, 192, 203],    # 8 Traffic_Warning_Sign: Pink
-        [255, 127, 36],    # 9 Road_Falling_Object: Chocolate1
-        [255, 64, 64],    # 10 Road_Intrusion_Object: Brown1
-        [255, 0, 255],    # 11 Animal: Magenta
-    ]
-    return colormap
-
 
 def check_args(args):
     '''
@@ -257,7 +237,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Settings
-    colormap = get_colormap()
     area_scope, det_scope, voxel_size = set_views(args)
     draw_status, cloud_format = check_args(args)
     print("Draw Status: ", draw_status)
@@ -265,11 +244,11 @@ if __name__ == '__main__':
 
     if not args.draw_3d:
         # Draw BEV maps
-        bev_visualizer = VisualBEV(voxel_size=voxel_size, area_scope=area_scope, colormap=colormap)
+        bev_visualizer = VisualBEV(voxel_size=voxel_size, area_scope=area_scope, colormap=data_loader.colormap)
         bev_visualizer.visualization(draw_status, draw_lists, draw_elements, args.visual)
 
     else:
         # Draw 3D maps
         scene_visualizer = Visual3D(voxel_size=voxel_size, area_scope=area_scope, 
-            colormap=colormap, viewpoint = args.viewpoint)
+            colormap=data_loader.colormap, viewpoint = args.viewpoint)
         scene_visualizer.visualization(draw_status, draw_lists, draw_elements, args.visual)
