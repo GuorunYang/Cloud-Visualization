@@ -33,12 +33,12 @@ def collect_eval_results(result_dir):
     collect_metrics = [
         ".-999-999._CLASSAWARE_Overall_AP_0.50",
         ".-999-999._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
-        ".-68-156._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
-        ".156-220._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
-        ".220-300._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
         ".-999-999._CLASSAWARE_TYPE_PEDESTRIAN_AP_0.50",
         ".-999-999._CLASSAWARE_TYPE_CYCLIST_AP_0.50",
         ".-999-999._CLASSAWARE_TYPE_MISC_AP_0.50",
+        ".-68-156._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
+        ".156-220._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
+        ".220-300._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
     ]
     metric_results = {}
     for metric_name in collect_metrics:
@@ -54,7 +54,10 @@ def collect_eval_results(result_dir):
     epoch_num = len(epoch_results)
     for i in range(1, epoch_num+1):
         for metric_name in collect_metrics:
-            metric_results[metric_name].append(epoch_results[i][metric_name])
+            if metric_name in epoch_results:
+                metric_results[metric_name].append(epoch_results[i][metric_name])
+            else:
+                metric_results[metric_name].append(0)
     return epoch_results, metric_results
 
 def draw_epoch_results(metric_results, save_dir):
@@ -75,8 +78,15 @@ def get_best_epoch(metric_results, use_metric = ".-999-999._CLASSAWARE_Overall_A
     if use_metric in metric_results:
         eval_results = metric_results[use_metric]
         best_epoch = np.argmax(eval_results) + 1
-        print("According to {} , Best Epoch Number: {}, Result: {:.4f}".format(
-            use_metric, best_epoch, eval_results[best_epoch-1]))
+        print("Best Epoch Number: {}".format(best_epoch))
+        for metric_name, metric_array in metric_results.items():
+            print("Metric Name: {} , Result : {:.4f} ".format(metric_name, metric_array[best_epoch-1]))
+        last_epoch = len(eval_results)
+        print("Last Epoch Number: {}".format(last_epoch))
+        for metric_name, metric_array in metric_results.items():
+            print("Metric Name: {} , Result : {:.4f} ".format(metric_name, metric_array[last_epoch-1]))
+
+
 
 def get_model_path(model_id):
     model_path = model_id
