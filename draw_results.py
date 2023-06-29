@@ -44,6 +44,7 @@ def collect_eval_results(result_dir):
     for metric_name in collect_metrics:
         metric_results[metric_name] = []
     result_list = sorted(os.listdir(result_dir))
+    # print("Result list: ", result_list)
     epoch_results = {}
     for i, result_name in enumerate(result_list):
         if result_name.startswith("eval") and result_name.endswith(".json"):
@@ -52,12 +53,16 @@ def collect_eval_results(result_dir):
             epoch_results[epoch_id] = load_eval_json(result_pth)
 
     epoch_num = len(epoch_results)
+    # print("Epoch result keys: ", epoch_results.keys())
     for i in range(1, epoch_num+1):
         for metric_name in collect_metrics:
-            if metric_name in epoch_results:
+            if metric_name in epoch_results[i]:
                 metric_results[metric_name].append(epoch_results[i][metric_name])
             else:
+                print("Metric {} is NOT in epoch {} results".format(metric_name, i))
                 metric_results[metric_name].append(0)
+    # print("Epoch results: ", epoch_results)
+    # print("Metric results: ", metric_results)
     return epoch_results, metric_results
 
 def draw_epoch_results(metric_results, save_dir):
