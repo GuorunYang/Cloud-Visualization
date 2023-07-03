@@ -3,6 +3,7 @@ import numpy as np
 import pickle as pkl
 import os
 import argparse
+import data_loader
 from tqdm import tqdm
 
 class LabelParser(object):
@@ -10,26 +11,27 @@ class LabelParser(object):
     def __init__(self):
         # super(ClassName, self).__init__()
         # self.arg = arg
-        self.cls_dict = {
-            "smallmot"      : "Vehicle",
-            "bigmot"        : "Vehicle",
-            "trafficcone"   : "Misc",
-            "pedestrian"    : "Pedestrian",
-            "crashbarrel"   : "Misc",
-            "tricyclist"    : "Cyclist",
-            "bicyclist"     : "Cyclist",
-            "motorcyclist"  : "Cyclist",
-            "onlybicycle"   : "Cyclist",
-            "crowd"         : "Misc",
-            "onlytricycle"  : "Cyclist",
-            "stopbar"       : "Unknown",
-            "smallmovable"  : "Misc",
-            "safetybarrier" : "Unknown",
-            "smallunmovable": "Misc",
-            "warningpost"   : "Misc",
-            "fog"           : "Unknown",
-            "sign"          : "Misc",
-        }
+        # self.cls_dict = {
+        #     "smallmot"      : "Vehicle",
+        #     "bigmot"        : "Vehicle",
+        #     "trafficcone"   : "Misc",
+        #     "pedestrian"    : "Pedestrian",
+        #     "crashbarrel"   : "Misc",
+        #     "tricyclist"    : "Cyclist",
+        #     "bicyclist"     : "Cyclist",
+        #     "motorcyclist"  : "Cyclist",
+        #     "onlybicycle"   : "Cyclist",
+        #     "crowd"         : "Misc",
+        #     "onlytricycle"  : "Cyclist",
+        #     "stopbar"       : "Unknown",
+        #     "smallmovable"  : "Misc",
+        #     "safetybarrier" : "Unknown",
+        #     "smallunmovable": "Misc",
+        #     "warningpost"   : "Misc",
+        #     "fog"           : "Unknown",
+        #     "sign"          : "Misc",
+        # }
+        self.cls_dict = data_loader.cls_dict
         self.annotation_cls = list(self.cls_dict.keys())
         self.model_cls = [
             "Vehicle", "Pedestrian", "Cyclist", "Misc", "Unknown"
@@ -46,7 +48,6 @@ class LabelParser(object):
             print('PKL label path: ', pkl_label_path, ' does not exist!')
             return label_dict
 
-
         cls_stat = {}
         for cls_name in self.model_cls:
             cls_stat[cls_name] = {
@@ -62,12 +63,17 @@ class LabelParser(object):
         for frame_name, frame_label in tqdm(pkl_label.items()):
             for k, anno in enumerate(frame_label):
                 # print("ori lbl: ", anno["original_lbl"].lower())
-                anno_cls = self.cls_dict[anno["original_lbl"].lower()]
+                try:
+                    anno_cls = self.cls_dict[anno["original_lbl"].lower()]
+                except:
+                    print("Origin lbl: {}, Mapping lbl: {}".format(
+                        anno["original_lbl"], anno["lbl"]
+                    ))
                 anno_vec = np.array([anno["x"], anno["y"], anno["z"]])
                 anno_dist = np.linalg.norm(anno_vec)
-                if anno_dist > 400:
-                    print(anno_vec)
-                    continue
+                # if anno_dist > 400:
+                #     print(anno_vec)
+                #     continue
                 if anno_cls in cls_stat:
                     # print("Cls stat: ", cls_stat[anno_cls])
                     cls_stat[anno_cls]["count"] += 1
@@ -111,7 +117,7 @@ class LabelParser(object):
         for i, anno in enumerate(labels):
             # label_cls = anno["original_lbl"]
             anno["rotation_y"] = np.pi / 2.0 - anno["rotation_y"] + np.pi
-            label_cls = get_cls_mapping(anno["original_lbl"])
+            label_cls = self.cls_dict[anno["original_lbl"]]
             label_dimension = "{:.4f} {:.4f} {:.4f}".format(anno["height"], anno["width"], anno["length"])
             label_location = "{:.4f} {:.4f} {:.4f}".format(anno["x"], anno["y"], anno["z"])
             label_rotation = "{:.4f}".format(anno["rotation_y"])
@@ -137,4 +143,3 @@ if __name__ == '__main__':
         print("Cls: {} Count: {} Max Dist: {:.2f}".format(
             stat_k, stat_v["count"], stat_v["max_dist"]
         ))
-
