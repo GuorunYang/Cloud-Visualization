@@ -128,8 +128,9 @@ def download_remote_file(remote_path, local_path = None):
 
 
 def load_cloud(cloud_path):
+    points = np.zeros((0, 4), dtype=np.float32)
     if cloud_path.endswith('.bin'):
-        return np.fromfile(cloud_path, dtype=np.float32).reshape(-1, 5)
+        points = np.fromfile(cloud_path, dtype=np.float32).reshape(-1, 5)
     elif cloud_path.endswith('.pcd'):
         pcd_cloud = pypcd.PointCloud.from_path(cloud_path)
         points = np.zeros([pcd_cloud.width, 4], dtype=np.float32)
@@ -137,13 +138,17 @@ def load_cloud(cloud_path):
         points[:, 1] = pcd_cloud.pc_data['y'].copy()
         points[:, 2] = pcd_cloud.pc_data['z'].copy()
         points[:, 3] = pcd_cloud.pc_data['intensity'].copy()
-        return points
     elif cloud_path.endswith('.txt'):
-        return np.loadtxt(cloud_path, dtype = np.float32)
+        points = np.loadtxt(cloud_path, dtype = np.float32)
     elif cloud_path.endswith('.npy'):
-        return np.load(cloud_path).astype(np.float32)
+        points = np.load(cloud_path).astype(np.float32)
     else:
         raise TypeError('Cannot support cloud format')
+    if points.shape[0] > 0:
+        points_xyz = points[:, :3]
+        points = points[~(points_xyz == 0).all(1)]  # Remove zero points
+        points = points[~np.isnan(points).any(axis=1)]  # Remove NaN points
+    return points
 
 def load_line(ln):
     '''
