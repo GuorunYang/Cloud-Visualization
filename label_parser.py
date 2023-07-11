@@ -38,6 +38,50 @@ class LabelParser(object):
         ]
 
 
+    def filter_pkl_label(self, 
+                         src_label_path, 
+                         des_label_path,
+                         reserve_frame_dir = None,  
+                         filter_num = -1):
+        pkl_file = open(src_label_path, 'rb')
+        src_label = pkl.load(pkl_file)
+        des_label = {}
+        frame_num = len(src_label)
+        reserve_frames = set()
+        det_cls_array = list(data_loader.det_cls_dict.values())
+        print("Det cls array: ", det_cls_array)
+        if reserve_frame_dir is not None:
+            if os.path.isdir(reserve_frame_dir):
+                reserve_list = os.listdir(reserve_frame_dir)
+                for reserve_name in reserve_list:
+                    reserve_frames.add(reserve_name.split(".")[0])
+        for frame_name, frame_label in tqdm(src_label.items()):
+            if filter_num > 0:
+                anno_cnt = 0
+                for k, anno in enumerate(frame_label):
+                    try:
+                        anno_cls = self.cls_dict[anno["original_lbl"].lower()]
+                    except:
+                        print("Origin lbl: {}, Mapping lbl: {}".format(
+                            anno["original_lbl"], anno["lbl"]
+                        ))
+                    if (anno_cls in det_cls_array) and (anno["is_crowd"] == 'False'):
+                        anno_cnt += 1
+                # print("Annos count:", anno_cnt)
+                if anno_cnt <= filter_num:
+                    print("{}".format(frame_name))
+                    continue
+            if len(reserve_frames) > 0:
+                if frame_name not in reserve_frames:
+                    continue
+            des_label[frame_name] = frame_label
+        print("Filter frame: {} -> {}".format(len(src_label), len(des_label)))
+        with open(des_label_path, "wb") as f:
+            pkl.dump(des_label, f)
+
+
+
+
     def parse_pkl_label(self, pkl_label_path, kitti_label_dir = None):
         '''
             Parse the pkl label as KITTI format
@@ -133,13 +177,19 @@ class LabelParser(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Label Parser')
-    parser.add_argument('--pkl_path', type=str, default='visual_image', help='Save path for BEV or 3D maps (file or directory)')
+    parser.add_argument('--src_pkl_path', type=str, default="annos.pkl", help='Src pkl path')
+    parser.add_argument('--des_pkl_path', type=str, default=None, help='Des pkl path')
+    parser.add_argument('--reserve_dir', type=str, default=None, help='Reserve frame directory')
+    parser.add_argument('--filter_num', type=int, default=-1, help='Filter num')
+
     args = parser.parse_args()
 
     label_parser = LabelParser()
-    frame_num, pkl_stat = label_parser.parse_pkl_label(args.pkl_path)
+    frame_num, pkl_stat = label_parser.parse_pkl_label(args.src_pkl_path)
     print("Frame number: ", frame_num)
     for stat_k, stat_v in pkl_stat.items():
         print("Cls: {} Count: {} Max Dist: {:.2f}".format(
             stat_k, stat_v["count"], stat_v["max_dist"]
         ))
+    if args.des_pkl_path is not None:  
+        label_parser.filter_pkl_label(args.src_pkl_path, args.des_pkl_path, args.reserve_dir, args.filter_num)

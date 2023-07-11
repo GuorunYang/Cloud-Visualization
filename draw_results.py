@@ -108,12 +108,12 @@ def get_model_path(model_id):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Draw epoch evaluation results')
-    parser.add_argument('-m', '--model', type=str, default=None, help='Remote Model ID')
+    parser.add_argument('-n', '--name', type=str, default=None, help='Remote or local name of model(Example: t-20230628035015-rdjph)')
     parser.add_argument('-s', '--save', type=str, default="./", help='Save model path')
     parser.add_argument('-v', '--visual', type=str, default="visual", help='Visual path')
     args = parser.parse_args()
 
-    model_eval_path = get_model_path(args.model)  # Get model path
+    model_eval_path = get_model_path(args.name)  # Get model path
     if model_eval_path is not None:
         local_eval_path = model_eval_path
         # Download remote evaluation results
