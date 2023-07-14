@@ -72,8 +72,8 @@ if __name__ == '__main__':
         # print("Best Eq: {}x + {}y + {}z + {} = 0".format(
         #     best_eq[0], best_eq[1], best_eq[2], best_eq[3]
         # ))
-        # print("All points: {}, Inliers: {}, Ratio: {:.4f}".format(
-        #     raw_cloud.shape[0], best_inliers.shape[0], best_inliers.shape[0]/raw_cloud.shape[0]))
+        print("All points: {}, Inliers: {}, Ratio: {:.4f}".format(
+            raw_cloud.shape[0], best_inliers.shape[0], best_inliers.shape[0]/raw_cloud.shape[0]))
         inlier_cloud = raw_cloud[best_inliers, :]
         avg_height = np.mean(inlier_cloud[:, 2])
         inlier_heights.append(avg_height)
@@ -84,8 +84,8 @@ if __name__ == '__main__':
 
     # Compute the medium of inlier points
     median_height = np.median(inlier_heights)
-    print("Inlier height: ", inlier_heights)
-    print("Median height: ", median_height) 
+    # print("Inlier height: ", inlier_heights)
+    print("Median Ground height: ", median_height) 
 
         
 
