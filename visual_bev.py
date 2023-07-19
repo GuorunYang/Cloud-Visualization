@@ -10,7 +10,7 @@ class VisualBEV(object):
     """
         BEV Visualization for point cloud and detections
     """
-    def __init__(self, voxel_size = None, area_scope = None, colormap = None):
+    def __init__(self, voxel_size = None, area_scope = None, colormap = None, cloud_rotation = 0.0):
         self.voxel_size = (0.12, 0.12, 0.2)
         self.area_scope = [[-72, 92], [-72, 72], [-5, 5]]
         self.colormap = data_loader.colormap
@@ -21,6 +21,7 @@ class VisualBEV(object):
             0.3,
             0.35
         ]
+        self.cloud_rotation = cloud_rotation
         if not voxel_size is None:
             self.voxel_size = voxel_size
         if not area_scope is None:
@@ -111,7 +112,7 @@ class VisualBEV(object):
     def draw_bev_map(self, draw_status, cloud_path, frame_results = None, frame_labels = None, frame_polys = None,
                  frame_voxel_path = None, frame_image_path = None, histogram_intensity = True):
         if draw_status["draw_cloud"]:
-            cloud = data_loader.load_cloud(cloud_path)
+            cloud = data_loader.load_cloud(cloud_path, self.cloud_rotation)
             voxel_map = self.convert_pts_to_bev_map(cloud)
             bev_map = voxel_map.sum(axis=2)
 

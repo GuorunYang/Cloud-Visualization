@@ -73,6 +73,13 @@ det_cls_dict = {
     3 : 'Cyclist', 
     4 : 'Misc',
 }
+json_cls_dict = {
+    # 'TYPE_UNKNOWN' : 'Unknown', 
+    'VEHICLE'       : 'Vehicle', 
+    'PEDESTRIAN'    : 'Pedestrian',
+    'CYCLIST'       : 'Cyclist',
+    'MISC'          : 'Misc'
+}
 
 colormap = [
     # [0, 0, 0],
@@ -127,7 +134,7 @@ def download_remote_file(remote_path, local_path = None):
         rclone.with_config(cfg).copy(remote_path, local_path)
 
 
-def load_cloud(cloud_path):
+def load_cloud(cloud_path, rotation = 0.0):
     points = np.zeros((0, 4), dtype=np.float32)
     if cloud_path.endswith('.bin'):
         points = np.fromfile(cloud_path, dtype=np.float32).reshape(-1, 5)
@@ -148,6 +155,18 @@ def load_cloud(cloud_path):
         points_xyz = points[:, :3]
         points = points[~(points_xyz == 0).all(1)]  # Remove zero points
         points = points[~np.isnan(points).any(axis=1)]  # Remove NaN points
+
+        if rotation != 0.0:
+            # Convert the angle from degrees to radians
+            points_xyz = points[:, :3]
+            angle_rad = np.radians(rotation)
+            # Define the rotation matrix around the Z-axis
+            rotation_matrix = np.array([[np.cos(angle_rad), -np.sin(angle_rad), 0],
+                                        [np.sin(angle_rad), np.cos(angle_rad), 0],
+                                        [0, 0, 1]])
+            # Apply the rotation to the point cloud
+            rotated_points_xyz = np.dot(points_xyz, rotation_matrix.T)
+            points[:, :3] = rotated_points_xyz
     return points
 
 def load_line(ln):
@@ -285,37 +304,15 @@ def load_poly_line(poly_ln):
         poly_vertices = poly_vertices_bottom + poly_vertices_up
     return poly_type, poly_box, poly_track, poly_vertices
 
-def load_single_result(det_path):
-    '''
-        Load detection results from single frame
-    '''
-    results = [{'dets': {}} for i in range(1)]
-    with open(det_path, 'r') as f:
-        det_lines = f.readlines()
-        for det_ln in det_lines:
-            det_type, det_box, det_score, det_iou, det_track = load_line(det_ln)
-            if 'det_box' in results[0]['dets']:
-                results[0]['dets']['det_box'].append(det_box)
-            else:
-                results[0]['dets']['det_box'] = [det_box]
-            if 'name' in results[0]['dets']:
-                results[0]['dets']['name'].append(det_type)
-            else:
-                results[0]['dets']['name'] = [det_type]
-            if 'score' in results[0]['dets']:
-                results[0]['dets']['score'].append(det_score)
-            else:
-                results[0]['dets']['score'] = [det_score]
-            if det_track is not None:
-                if 'track_info' in results[0]['dets']:
-                    results[0]['dets']['track_info'].append(det_track)
-                else:
-                    results[0]['dets']['track_info'] = [det_track]
 
-    for i in range(len(results)):
-        for key in results[i]['dets']:
-            results[i]['dets'][key] = np.array(results[i]['dets'][key])
-    return results
+def load_single_result(det_path):
+    if det_path.endswith('.txt'):
+        return load_single_txt(det_path)
+    elif det_path.endswith('.json'):
+        return load_single_json(det_path)
+    else:
+        print("Cannot support the format of det path {}".format(det_path))
+    
 
 def load_single_poly(poly_path):
     '''
@@ -368,27 +365,12 @@ def load_dir_result(det_dir, query_frame = None, sort_by_num = False):
                 query_flag = True
                 print("Query frame {} is in result directory".format(query_frame))
         result_dict[frame_name] = {'dets': {}}
-        with open(det_path, 'r') as f:
-            det_lines = f.readlines()
-            for det_ln in det_lines:
-                det_type, det_box, det_score, det_iou, det_track = load_line(det_ln)
-                if 'det_box' in result_dict[frame_id]['dets']:
-                    result_dict[frame_name]['dets']['det_box'].append(det_box)
-                else:
-                    result_dict[frame_name]['dets']['det_box'] = [det_box]
-                if 'name' in result_dict[frame_id]['dets']:
-                    result_dict[frame_name]['dets']['name'].append(det_type)
-                else:
-                    result_dict[frame_name]['dets']['name'] = [det_type]
-                if 'score' in result_dict[frame_id]['dets']:
-                    result_dict[frame_name]['dets']['score'].append(det_score)
-                else:
-                    result_dict[frame_name]['dets']['score'] = [det_score]
-                if det_track is not None:
-                    if 'track_info' in result_dict[frame_name]['dets']:
-                        result_dict[frame_name]['dets']['track_info'].append(det_track)
-                    else:
-                        result_dict[frame_name]['dets']['track_info'] = [det_track]
+        if det_fn.endswith('.txt'):
+            result_dict.update(load_single_txt(det_path))
+        elif det_fn.endswith('.json'):
+            frame_result = load_single_json(det_path)
+            result_dict.update(load_single_json(det_path))
+ 
     for frame_name, frame_det in result_dict.items():
         for key in frame_det['dets']:
             frame_det['dets'][key] = np.array(frame_det['dets'][key])
@@ -396,7 +378,6 @@ def load_dir_result(det_dir, query_frame = None, sort_by_num = False):
         if not query_flag:
             print("Query frame NOT in result pkl".format(query_frame))
     return result_dict
-
 
 
 def load_pkl_result(pkl_result_path, query_frame = None, sort_by_num = False):
@@ -447,6 +428,85 @@ def load_pkl_result(pkl_result_path, query_frame = None, sort_by_num = False):
     if not query_frame is None:
         if not query_flag:
             print("Query frame NOT in result pkl".format(query_frame))
+    return result_dict
+
+
+def load_single_txt(det_path):
+    '''
+        Load detection results from single txt file
+    '''
+    result_dict = {}
+    frame_name = os.path.splitext(det_path.split('/')[-1])[0]
+    result_dict[frame_name] = {'dets': {}}
+    with open(det_path, 'r') as f:
+        det_lines = f.readlines()
+        for det_ln in det_lines:
+            det_type, det_box, det_score, det_iou, det_track = load_line(det_ln)
+            if 'det_box' in result_dict[frame_name]['dets']:
+                result_dict[frame_name]['dets']['det_box'].append(det_box)
+            else:
+                result_dict[frame_name]['dets']['det_box'] = [det_box]
+            if 'name' in result_dict[frame_name]['dets']:
+                result_dict[frame_name]['dets']['name'].append(det_type)
+            else:
+                result_dict[frame_name]['dets']['name'] = [det_type]
+            if 'score' in result_dict[frame_name]['dets']:
+                result_dict[frame_name]['dets']['score'].append(det_score)
+            else:
+                result_dict[frame_name]['dets']['score'] = [det_score]
+            if det_track is not None:
+                if 'track_info' in result_dict[frame_name]['dets']:
+                    result_dict[frame_name]['dets']['track_info'].append(det_track)
+                else:
+                    result_dict[frame_name]['dets']['track_info'] = [det_track]
+    for frame_name, frame_det in result_dict.items():
+        for key in frame_det['dets']:
+            frame_det['dets'][key] = np.array(frame_det['dets'][key])
+    return result_dict
+
+
+def load_single_json(det_path):
+    '''
+        Load detection results from single json file
+    '''
+    result_dict = {}
+    frame_name = os.path.splitext(det_path.split('/')[-1])[0]
+    result_dict[frame_name] = {'dets': {}}
+    # results = [{'dets': {}} for i in range(1)]
+    with open(det_path, 'r') as f:
+        json_results = json.load(f)
+        for i, det_obj in enumerate(json_results['obstacles']):
+            det_type = json_cls_dict[det_obj['label_class']]
+            det_score = det_obj['confidence']
+            det_dimensions = [det_obj['width'], det_obj['length'], det_obj['height']]
+            det_locations = [det_obj['center']['x'], det_obj['center']['y'], det_obj['center']['z']]
+            det_rotation_y = [det_obj['orientation']]
+
+            # hardcode for current detections
+            det_locations = [det_obj['center']['y'], -det_obj['center']['x'], det_obj['center']['z']]
+            det_rotation_y = [det_obj['orientation'] + np.pi]
+
+            det_box = det_locations + det_dimensions + det_rotation_y
+            if det_type == 'Vehicle':
+                if det_obj['length'] >= 6.0:
+                    det_type = 'Truck'
+                else:
+                    det_type = 'Car'
+            if 'det_box' in result_dict[frame_name]['dets']:
+                result_dict[frame_name]['dets']['det_box'].append(det_box)
+            else:
+                result_dict[frame_name]['dets']['det_box'] = [det_box]
+            if 'name' in result_dict[frame_name]['dets']:
+                result_dict[frame_name]['dets']['name'].append(det_type)
+            else:
+                result_dict[frame_name]['dets']['name'] = [det_type]
+            if 'score' in result_dict[frame_name]['dets']:
+                result_dict[frame_name]['dets']['score'].append(det_score)
+            else:
+                result_dict[frame_name]['dets']['score'] = [det_score]
+    for frame_name, frame_det in result_dict.items():
+        for key in frame_det['dets']:
+            frame_det['dets'][key] = np.array(frame_det['dets'][key])
     return result_dict
 
 
@@ -638,8 +698,12 @@ def load_results(result_pth, query_frame = None, sort_by_num = False):
             results = load_pkl_result(result_pth, query_frame)
             return results
         elif result_pth.endswith('.txt'):
-            results = load_single_result(result_pth)
+            results = load_single_txt(result_pth)
             return results
+        else:
+            print("Cannot support result format")
+        # elif result_pth.endswith('.json'):
+        #     results = load_single_json(result_pth)
     else:
         raise TypeError('Cannot load labels')
         return None    
@@ -714,7 +778,7 @@ def get_boxes_from_results(frame_results = None):
         det_labels = None if det_types is None else np.array([classes.index(type) for type in det_types if type != None])
         return det_boxes3d, det_scores, det_labels, det_trackids
     else:
-        return None
+        return None, None, None, None
 
 def get_boxes_from_labels(frame_labels = None):
     if frame_labels is not None:
@@ -729,7 +793,7 @@ def get_boxes_from_labels(frame_labels = None):
         gt_labels = None if gt_types is None else np.array([classes.index(type) for type in gt_types])
         return gt_boxes3d, gt_scores, gt_labels, gt_trackids
     else:
-        return None
+        return None, None, None, None
 
 
 

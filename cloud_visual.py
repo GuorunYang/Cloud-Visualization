@@ -225,10 +225,11 @@ if __name__ == '__main__':
 
     parser.add_argument('--save', type=str, default='./', help='Save path for remote data')    
     parser.add_argument('--visual', type=str, default='visual_image', help='Save path for BEV or 3D maps (file or directory)')
-    parser.add_argument('--viewpoint',type=str, default='Vehicle', help='View points (Vehicle, V2X)')
+    parser.add_argument('--viewpoint', type=str, default='Vehicle', help='View points (Vehicle, V2X)')
     parser.add_argument('--draw_3d', action='store_true', default=False, help='Draw 3D maps')
     parser.add_argument('--draw_scale', action='store_true', default=False, help='Draw the circle scales on BEV map')
     parser.add_argument('--draw_ground', action='store_true', default=False, help='Draw ground plane on 3D map')
+    parser.add_argument('--rotation', type=float, default=0.0, help='Rotation angle')
     parser.add_argument('--debug', action='store_true', default=False, help='Debug mode')
     parser.add_argument('--ground_height', type=float, default=-1.60, help='Ground height')
     parser.add_argument('--sort_by_num', action='store_true', default=False, help='Sort the files by number instead of name')
@@ -244,11 +245,12 @@ if __name__ == '__main__':
 
     if not args.draw_3d:
         # Draw BEV maps
-        bev_visualizer = VisualBEV(voxel_size=voxel_size, area_scope=area_scope, colormap=data_loader.colormap)
+        bev_visualizer = VisualBEV(voxel_size=voxel_size, area_scope=area_scope, 
+                                   colormap=data_loader.colormap, cloud_rotation=args.rotation)
         bev_visualizer.visualization(draw_status, draw_lists, draw_elements, args.visual)
 
     else:
         # Draw 3D maps
         scene_visualizer = Visual3D(voxel_size=voxel_size, area_scope=area_scope, 
-            colormap=data_loader.colormap, viewpoint = args.viewpoint)
+                                    colormap=data_loader.colormap, viewpoint = args.viewpoint, cloud_rotation=args.rotation)
         scene_visualizer.visualization(draw_status, draw_lists, draw_elements, args.visual)

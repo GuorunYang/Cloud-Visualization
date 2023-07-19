@@ -15,7 +15,7 @@ class Visual3D(object):
     """
         3D Visualization for point cloud and detections
     """
-    def __init__(self, voxel_size = None, area_scope = None, colormap = None, viewpoint = None):
+    def __init__(self, voxel_size = None, area_scope = None, colormap = None, viewpoint = None, cloud_rotation = 0.0):
         # Default parameters
         self.viewpoint = "vehicle" 
         self.voxel_size = (0.12, 0.12, 0.2)
@@ -28,6 +28,7 @@ class Visual3D(object):
             0.3,
             0.35
         ]
+        self.cloud_rotation = cloud_rotation
         if not voxel_size is None:
             self.voxel_size = voxel_size
         if not area_scope is None:
@@ -117,7 +118,7 @@ class Visual3D(object):
                  frame_voxel_path = None, frame_image_path = None):
         import mayavi.mlab as mlab
         if draw_status["draw_cloud"]:
-            cloud = data_loader.load_cloud(cloud_path)
+            cloud = data_loader.load_cloud(cloud_path, self.cloud_rotation)
             fig = self.draw_lidar(cloud, fig=fig)
             if draw_status["draw_result"] and draw_status["draw_label"]:
                 gt_color    = (178/255.0, 255/255.0, 102/255.0)
