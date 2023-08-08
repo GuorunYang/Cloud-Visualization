@@ -31,14 +31,14 @@ def load_eval_json(json_pth):
 
 def collect_eval_results(result_dir):
     collect_metrics = [
-        ".-999-999._CLASSAWARE_Overall_AP_0.50",
-        ".-999-999._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
-        ".-999-999._CLASSAWARE_TYPE_PEDESTRIAN_AP_0.50",
-        ".-999-999._CLASSAWARE_TYPE_CYCLIST_AP_0.50",
-        ".-999-999._CLASSAWARE_TYPE_MISC_AP_0.50",
-        ".-68-156._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
-        ".156-220._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
-        ".220-300._CLASSAWARE_TYPE_VEHICLE_AP_0.50",
+        ".-999-999.-CLASSAWARE_Overall_AP-0.50",
+        ".-999-999.-CLASSAWARE_TYPE-VEHICLE_AP-0.50",
+        ".-999-999.-CLASSAWARE_TYPE-PEDESTRIAN_AP-0.50",
+        ".-999-999.-CLASSAWARE_TYPE-CYCLIST_AP-0.50",
+        ".-999-999.-CLASSAWARE_TYPE-MISC_AP-0.50",
+        ".-68-156.-CLASSAWARE_TYPE-VEHICLE_AP-0.50",
+        ".156-220.-CLASSAWARE_TYPE-VEHICLE_AP-0.50",
+        ".220-300.-CLASSAWARE_TYPE-VEHICLE_AP-0.50",
     ]
     metric_results = {}
     for metric_name in collect_metrics:
@@ -79,7 +79,7 @@ def draw_epoch_results(metric_results, save_dir):
         save_pth = os.path.join(save_dir, "{}.png".format(metric_name))
         plt.savefig(save_pth)
 
-def get_best_epoch(metric_results, use_metric = ".-999-999._CLASSAWARE_Overall_AP_0.50"):
+def get_best_epoch(metric_results, use_metric = ".-999-999.-CLASSAWARE_Overall_AP-0.50"):
     if use_metric in metric_results:
         eval_results = metric_results[use_metric]
         best_epoch = np.argmax(eval_results) + 1
