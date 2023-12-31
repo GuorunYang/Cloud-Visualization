@@ -46,6 +46,15 @@ class VisualBEV(object):
                     frame_labels = draw_elements["labels"][frame_name]
                 else:
                     print("Cannot find frame {} in labels".format(frame_name))
+
+            if draw_status["draw_gt_check"]:
+                if frame_name in draw_elements["checks"]:
+                    frame_results = draw_elements["checks"][frame_name]
+                    frame_labels = draw_elements["checks"][frame_name]
+                    print("GT check")
+                else:
+                    print("Cannot find frame {} in checks".format(frame_name))
+
             # if draw_status["draw_poly"]:
             #     frame_polys = draw_elements["polys"][frame_name]
             # if draw_status["draw_voxel"]:
@@ -91,6 +100,15 @@ class VisualBEV(object):
                         frame_labels = draw_elements["labels"][frame_name]
                     else:
                         print("Cannot find frame {} in labels".format(frame_name))
+                
+                if draw_status["draw_gt_check"]:
+                    if frame_name in draw_elements["checks"]:
+                        frame_results = draw_elements["checks"][frame_name]
+                        frame_labels = draw_elements["checks"][frame_name]
+                    else:
+                        print("Cannot find frame {} in labels".format(frame_name))
+
+
                 # if draw_status["draw_poly"]:
                 #     frame_polys = draw_elements["polys"][i]
                 # if draw_status["draw_voxel"]:
@@ -145,6 +163,15 @@ class VisualBEV(object):
                 bev_map = self.draw_bev_boxes(bev_map = bev_map.copy(), boxes3d = det_boxes3d, labels = det_cls,
                                          scores = det_scores, track_ids = det_trackids,
                                          thickness = 2, colorize_with_label = False, color=(45, 151, 255))
+            elif draw_status["draw_gt_check"]:
+                det_boxes3d, det_scores, det_cls, det_trackids = data_loader.get_boxes_from_results(frame_results)
+                gt_boxes3d, gt_scores, gt_cls, gt_trackids = data_loader.get_boxes_from_labels(frame_labels)
+                bev_map = self.draw_bev_boxes(bev_map=bev_map.copy(), boxes3d=gt_boxes3d, labels=gt_cls,
+                                         scores=gt_scores, track_ids=gt_trackids,
+                                         thickness = 2, colorize_with_label = False, color=(178, 255, 102))
+                bev_map = self.draw_bev_boxes(bev_map = bev_map.copy(), boxes3d = det_boxes3d, labels = det_cls,
+                                         scores = det_scores, track_ids = det_trackids,
+                                         thickness = 2, colorize_with_label = False, color=(45, 151, 255))                
             else:
                 if draw_status["draw_result"]:
                     det_boxes3d, det_scores, det_cls, det_trackids = data_loader.get_boxes_from_results(frame_results)

@@ -31,7 +31,8 @@ def check_args(args):
         "draw_cloud"    : False,
         "draw_result"   : False, 
         "draw_label"    : False,
-        "draw_poly"    : False,
+        "draw_gt_check" : False,
+        "draw_poly"     : False,
         "draw_voxel"    : False,
         "draw_image"    : False,
         "draw_scale"    : False, 
@@ -110,40 +111,56 @@ def check_args(args):
 
     # Step 3: Check the label
     if args.label is not None:
+        local_label_path = None
         if data_loader.check_file_path(args.label):
-            label_fn = os.path.basename(args.label)
-            local_label_dir = os.path.join(args.save, "label")
-            print("Downloading cloud from {} to {} ...".format(args.label, local_label_dir))
-            data_loader.download_remote_file(args.label, local_label_dir)
-            local_lobal_path = os.path.join(local_label_dir, label_fn)
-            print("Download Finish")
-            args.label = local_lobal_path
+            if args.label.startswith("tos://"):
+                label_fn = os.path.basename(args.label)
+                local_label_dir = os.path.join(args.save, "label")
+                print("Downloading label from {} to {} ...".format(args.label, local_label_dir))
+                data_loader.download_remote_file(args.label, local_label_dir)
+                local_label_path = os.path.join(local_label_dir, label_fn)
+                print("Download Finish")
+                args.label = local_label_path
             draw_status["draw_label"] = True
         else:
             draw_status["draw_label"] = False
 
-    # Step 4: Check the poly
+    # Step 4: check the gt
+    if args.gt_check is not None:
+        if data_loader.check_file_path(args.gt_check):
+            check_fn = os.path.basename(args.gt_check)
+            local_check_dir = os.path.join(args.save, "gt_check")
+            print("Downloading gt check info from {} to {} ...".format(args.gt_check, local_check_dir))
+            data_loader.download_remote_file(args.gt_check, local_check_dir)
+            local_check_path = os.path.join(local_check_dir, check_fn)
+            print("Download Finish")
+            args.gt_check = local_check_path
+            draw_status["draw_gt_check"] = True
+        else:
+            draw_status["draw_gt_check"] = False
+
+    # Step 5: Check the poly
     if args.poly is not None:
         if data_loader.check_file_path(args.poly):
             draw_status["draw_poly"] = True
         else:
             draw_status["draw_poly"] = False
 
-    # Step 5: Check the voxel
+    # Step 6: Check the voxel
     if args.voxel is not None:
         if data_loader.check_file_path(args.voxel):
             draw_status["draw_voxel"] = True
         else:
             draw_status["draw_voxel"] = False
 
-    # Step 6: Check the image
+    # Step 7: Check the image
     if args.image is not None:
         if data_loader.check_file_path(args.image):
             draw_status["draw_image"] = True
         else:
             draw_status["draw_image"] = False
 
-    # Step 7: Check other flags
+    # Step 8: Check other flags
     if args.colorize_by_intensity:
         draw_status["draw_intensity"] = True
     if args.draw_scale:
@@ -159,8 +176,8 @@ def set_views(args):
     # area_scope = [[-72, 92], [-72, 72], [-5, 5]]
     # det_scope = [[-60, 60], [-60, 60]]
 
-    area_scope = [[-80, 300], [-72, 72], [-5, 5]]
-    det_scope = [[-60, 300], [-25.6, 25.6]]
+    area_scope = [[-80, 220], [-72, 72], [-5, 5]]
+    det_scope = [[-60, 220], [-25.6, 25.6]]
     # if args.viewpoint.lower() == "vehicle":
     #     area_scope = [[-72, 92], [-72, 72], [-5, 5]]
     #     det_scope = [[-40, 80], [-60, 60]]
@@ -181,6 +198,7 @@ def get_draw_list(args, draw_status):
         "labels"    : [],
         "polys"     : [],
         "voxels"    : [],
+        "checks"    : [],
     }
 
     if draw_status["draw_frame"]:
@@ -192,11 +210,14 @@ def get_draw_list(args, draw_status):
             draw_lists["image_list"].append(args.image)
         query_frame = os.path.splitext(args.cloud.split("/")[-1])[0]
         if draw_status["draw_result"]:
-            draw_elements["results"] = data_loader.load_single_result(args.result)
+            draw_elements["results"] = data_loader.load_results(args.result, query_frame=query_frame)
         if draw_status["draw_label"]:
             draw_elements["labels"] = data_loader.load_labels(args.label, query_frame=query_frame)
+        if draw_status["draw_gt_check"]:
+            draw_elements["checks"] = data_loader.load_checks(args.gt_check, query_frame=query_frame)
         if draw_status["draw_poly"]:
             draw_elements["polys"] = data_loader.load_single_poly(args.poly)
+
 
     elif draw_status["draw_sequence"]:
         if draw_status["draw_cloud"]:
@@ -211,6 +232,8 @@ def get_draw_list(args, draw_status):
             draw_elements["labels"] = data_loader.load_labels(args.label, None, args.sort_by_num)
         if draw_status["draw_poly"]:
             draw_elements["polys"] = data_loader.load_polys(args.poly, args.sort_by_num)
+        if draw_status["draw_gt_check"]:
+            draw_elements["checks"] = data_loader.load_checks(args.gt_check, None, args.sort_by_num)
     return draw_lists, draw_elements
 
 
@@ -222,6 +245,7 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--result', type=str, default=None, help='Result path (file or directory)')
     parser.add_argument('-p', '--poly', type=str, default=None, help='Polygon result path (file or directory)')
     parser.add_argument('-v', '--voxel', type=str, default=None, help='Voxel map path (file or directory)')
+    parser.add_argument('-g', '--gt_check', type=str, default=None, help='GT check path (file)')
 
     parser.add_argument('--save', type=str, default='./', help='Save path for remote data')    
     parser.add_argument('--visual', type=str, default='visual_image', help='Save path for BEV or 3D maps (file or directory)')
@@ -240,7 +264,7 @@ if __name__ == '__main__':
     # Settings
     area_scope, det_scope, voxel_size = set_views(args)
     draw_status, cloud_format = check_args(args)
-    print("Draw Status: ", draw_status)
+    # print("Draw Status: ", draw_status)
     draw_lists, draw_elements = get_draw_list(args, draw_status)
 
     if not args.draw_3d:

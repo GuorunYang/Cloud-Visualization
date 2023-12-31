@@ -73,6 +73,13 @@ det_cls_dict = {
     3 : 'Cyclist', 
     4 : 'Misc',
 }
+check_cls_dict = {
+    0 : 'Vehicle',
+    1 : 'Pedestrian',
+    2 : 'Cyclist', 
+    3 : 'Misc',    
+}
+
 json_cls_dict = {
     # 'TYPE_UNKNOWN' : 'Unknown', 
     'VEHICLE'       : 'Vehicle', 
@@ -114,6 +121,10 @@ colormap = [
 #     [255, 0, 255],      # 11 Animal: Magenta
 # ]
 
+
+def check_local_pth(file_path):
+    return os.path.exists(file_path)
+
 def check_file_path(file_path):
     if file_path.startswith("tos://"):
         with open(".rclone.conf") as f:
@@ -126,6 +137,7 @@ def check_file_path(file_path):
     else:
         return os.path.exists(file_path)
 
+
 def download_remote_file(remote_path, local_path = None):
     if local_path is None:
         local_path = remote_path.split("/")[-1]
@@ -137,7 +149,7 @@ def download_remote_file(remote_path, local_path = None):
 def load_cloud(cloud_path, rotation = 0.0):
     points = np.zeros((0, 4), dtype=np.float32)
     if cloud_path.endswith('.bin'):
-        points = np.fromfile(cloud_path, dtype=np.float32).reshape(-1, 5)
+        points = np.fromfile(cloud_path, dtype=np.float32).reshape(-1, 4)
     elif cloud_path.endswith('.pcd'):
         pcd_cloud = pypcd.PointCloud.from_path(cloud_path)
         points = np.zeros([pcd_cloud.width, 4], dtype=np.float32)
@@ -217,7 +229,8 @@ def load_line(ln):
     elif len(line_array) == 11:
         # 2. Old label Version (Length = 11):
         type = line_array[0]
-        dimensions = [float(line_array[5]), float(line_array[4]), float(line_array[6])]
+        dimensions = [float(line_array[6]), float(line_array[4]), float(line_array[5])]
+        # dimensions = [float(line_array[5]), float(line_array[4]), float(line_array[6])]
         locations = [float(line_array[7]), float(line_array[8]), float(line_array[9])]
         rotation_y = [float(line_array[10])]
         box3d = locations + dimensions + rotation_y
@@ -271,6 +284,7 @@ def load_line(ln):
         box3d = locations + dimensions + rotation_y
         track_info = object_id + velocity
     return type, box3d, score, ious, track_info
+
 
 def load_poly_line(poly_ln):
     '''
@@ -383,52 +397,94 @@ def load_dir_result(det_dir, query_frame = None, sort_by_num = False):
 def load_pkl_result(pkl_result_path, query_frame = None, sort_by_num = False):
     result_dict = {}
     query_flag = False
-
+    if query_frame is not None:
+        query_frame, _ = os.path.splitext(query_frame)
     with open(pkl_result_path, 'rb') as f:
         pkl_results = pkl.load(f)
-        for dataset_name, dataset_results in pkl_results.items():            
-            for frame_name, frame_result in dataset_results.items():
-                if not query_frame is None:
-                    if not query_frame in frame_name:
-                        continue
-                    else:
-                        query_flag = True
-                        print("Query frame {} is in result pkl".format(query_frame))
-                result_dict[frame_name] = {'dets': {}}
-                for i, det_result in enumerate(frame_result):
-                    det_type = det_cls_dict[det_result['lbl']]
-                    det_locations = [float(det_result['x']), float(det_result['y']), float(det_result['z'])]
-                    det_dimensions = [float(det_result['width']), float(det_result['length']), float(det_result['height'])]
-                    # det_rotation_y = [float(det_result['rotation_y'])]
-                    det_rotation_y = [np.pi / 2.0 - det_result['rotation_y'] + np.pi]
-                    det_score = float(det_result['prob'])
-                    det_box = det_locations + det_dimensions + det_rotation_y
-                    if det_type == 'Vehicle':
-                        if det_result['length'] >= 6.0:
-                            det_type = 'Truck'
-                        else:
-                            det_type = 'Car'
+        for frame_name, frame_result in pkl_results.items():
+            if "/" in frame_name:
+                frame_name, _ = os.path.splitext(frame_name.split("/")[-1])
+            if not query_frame is None:
+                if not query_frame in frame_name:
+                    continue
+                else:
+                    query_flag = True
+                    print("Query frame {} is in label pkl".format(query_frame))
 
-                    if 'det_box' in result_dict[frame_name]['dets']:
-                        result_dict[frame_name]['dets']['det_box'].append(det_box)
+            result_dict[frame_name] = {
+                "dets" : {
+                    "name" : [], 
+                    "det_box" : [], 
+                    "score" : [],
+                },
+            }
+            
+            for i in range(len(frame_result['lbl'])):
+                det_type = check_cls_dict[frame_result['lbl'][i]]
+                det_length = frame_result['bbox'][i, 3]
+                if det_type == 'Vehicle':
+                    if det_length >= 6.0:
+                        det_type = 'Truck'
                     else:
-                        result_dict[frame_name]['dets']['det_box'] = [det_box]
-                    if 'name' in result_dict[frame_name]['dets']:
-                        result_dict[frame_name]['dets']['name'].append(det_type)
-                    else:
-                        result_dict[frame_name]['dets']['name'] = [det_type]
-                    if 'score' in result_dict[frame_name]['dets']:
-                        result_dict[frame_name]['dets']['score'].append(det_score)
-                    else:
-                        result_dict[frame_name]['dets']['score'] = [det_score]
+                        det_type = 'Car'
+                result_dict[frame_name]['dets']['name'].append(det_type)
+            result_dict[frame_name]['dets']['det_box'] = frame_result['bbox']
+            result_dict[frame_name]['dets']['score'] = frame_result['score']
+            rotation_y = np.pi / 2.0 - frame_result['bbox'][:, 6] + np.pi
+            result_dict[frame_name]['dets']['det_box'][:, 6] = rotation_y
+            result_dict[frame_name]["dets"]["det_box"][:, [3, 4]] = result_dict[frame_name]["dets"]["det_box"][:, [4, 3]]
 
-    for frame_name, frame_det in result_dict.items():
-        for key in frame_det['dets']:
-            frame_det['dets'][key] = np.array(frame_det['dets'][key])
-    if not query_frame is None:
-        if not query_flag:
-            print("Query frame NOT in result pkl".format(query_frame))
     return result_dict
+
+# def load_pkl_result(pkl_result_path, query_frame = None, sort_by_num = False):
+#     result_dict = {}
+#     query_flag = False
+
+#     with open(pkl_result_path, 'rb') as f:
+#         pkl_results = pkl.load(f)
+#         for dataset_name, dataset_results in pkl_results.items():            
+#             for frame_name, frame_result in dataset_results.items():
+#                 if not query_frame is None:
+#                     if not query_frame in frame_name:
+#                         continue
+#                     else:
+#                         query_flag = True
+#                         print("Query frame {} is in result pkl".format(query_frame))
+#                 result_dict[frame_name] = {'dets': {}}
+#                 for i, det_result in enumerate(frame_result):
+#                     det_type = det_cls_dict[det_result['lbl']]
+#                     det_locations = [float(det_result['x']), float(det_result['y']), float(det_result['z'])]
+#                     det_dimensions = [float(det_result['width']), float(det_result['length']), float(det_result['height'])]
+#                     # det_rotation_y = [float(det_result['rotation_y'])]
+#                     det_rotation_y = [np.pi / 2.0 - det_result['rotation_y'] + np.pi]
+#                     det_score = float(det_result['prob'])
+#                     det_box = det_locations + det_dimensions + det_rotation_y
+#                     if det_type == 'Vehicle':
+#                         if det_result['length'] >= 6.0:
+#                             det_type = 'Truck'
+#                         else:
+#                             det_type = 'Car'
+
+#                     if 'det_box' in result_dict[frame_name]['dets']:
+#                         result_dict[frame_name]['dets']['det_box'].append(det_box)
+#                     else:
+#                         result_dict[frame_name]['dets']['det_box'] = [det_box]
+#                     if 'name' in result_dict[frame_name]['dets']:
+#                         result_dict[frame_name]['dets']['name'].append(det_type)
+#                     else:
+#                         result_dict[frame_name]['dets']['name'] = [det_type]
+#                     if 'score' in result_dict[frame_name]['dets']:
+#                         result_dict[frame_name]['dets']['score'].append(det_score)
+#                     else:
+#                         result_dict[frame_name]['dets']['score'] = [det_score]
+
+#     for frame_name, frame_det in result_dict.items():
+#         for key in frame_det['dets']:
+#             frame_det['dets'][key] = np.array(frame_det['dets'][key])
+#     if not query_frame is None:
+#         if not query_flag:
+#             print("Query frame NOT in result pkl".format(query_frame))
+#     return result_dict
 
 
 def load_single_txt(det_path):
@@ -545,6 +601,66 @@ def load_single_label(label_path):
     return label_dict
 
 
+def load_pkl_check(pkl_check_path, query_frame = None, sort_by_num = False):
+    check_dict = {}
+    # Get the basename of query frame
+    if query_frame is not None:
+        query_frame, _ = os.path.splitext(query_frame)
+    with open(pkl_check_path, 'rb') as f:
+        pkl_checks = pkl.load(f)
+        query_flag = False
+        for frame_name, frame_check in tqdm(pkl_checks.items()):
+            # Get the basename of frame
+            if "/" in frame_name:
+                frame_name, _ = os.path.splitext(frame_name.split("/")[-1])
+            if not query_frame is None:
+                if not query_frame in frame_name:
+                    continue
+                else:
+                    query_flag = True
+                    print("Query frame {} is in label pkl".format(query_frame))
+            check_dict[frame_name] = {
+                "annos" : {"name" : [], "gt_box" : []}, 
+                "dets" : {"name" : [], "det_box" : []},
+            }
+            # Load the GT wrong
+            for i in range(frame_check['gt_wrong_num']):
+                check_type = check_cls_dict[frame_check['gt_wrong_label'][i]]
+                obj_length = frame_check['gt_wrong_bbox'][i, 3]
+                if check_type == 'Vehicle':
+                    if obj_length >= 6.0:
+                        check_type = 'Truck'
+                    else:
+                        check_type = 'Car'
+                check_dict[frame_name]["annos"]["name"].append(check_type)
+            check_dict[frame_name]["annos"]["name"] = np.array(check_dict[frame_name]["annos"]["name"])
+            check_dict[frame_name]["annos"]["gt_box"] = frame_check['gt_wrong_bbox']
+            check_dict[frame_name]["annos"]["gt_box"][:, [3, 4]] = check_dict[frame_name]["annos"]["gt_box"][:, [4, 3]]
+            rotation_y = np.pi / 2.0 - frame_check['gt_wrong_bbox'][:, 6] + np.pi
+            check_dict[frame_name]["annos"]["gt_box"][:, 6] = rotation_y
+
+            # Load the GT miss
+            for j in range(frame_check['gt_miss_num']):
+                check_type = check_cls_dict[frame_check['gt_miss_label'][j]]
+                obj_length = frame_check['gt_miss_bbox'][j, 3]
+                if check_type == 'Vehicle':
+                    if obj_length >= 6.0:
+                        check_type = 'Truck'
+                    else:
+                        check_type = 'Car'
+                check_dict[frame_name]["dets"]["name"].append(check_type)
+            check_dict[frame_name]["dets"]["name"] = np.array(check_dict[frame_name]["dets"]["name"])
+            check_dict[frame_name]["dets"]["det_box"] = frame_check['gt_miss_bbox']
+            check_dict[frame_name]["dets"]["det_box"][:, [3, 4]] = check_dict[frame_name]["dets"]["det_box"][:, [4, 3]]
+            rotation_y = np.pi / 2.0 - frame_check['gt_miss_bbox'][:, 6] + np.pi
+            check_dict[frame_name]["dets"]["det_box"][:, 6] = rotation_y
+
+        if not query_frame is None:
+            if not query_flag:
+                print("Query frame NOT in label pkl".format(query_frame))
+    return check_dict
+            
+
 def load_pkl_label(pkl_label_path, query_frame = None, sort_by_num = False):
     label_dict = {}
     annotation_cls = list(cls_dict.keys())
@@ -599,6 +715,7 @@ def load_pkl_label(pkl_label_path, query_frame = None, sort_by_num = False):
                 print("Query frame NOT in label pkl".format(query_frame))
 
         return label_dict
+
 
 def load_dir_label(label_dir, query_frame = None, sort_by_num = False):
     label_dict = {}
@@ -700,6 +817,9 @@ def load_results(result_pth, query_frame = None, sort_by_num = False):
         elif result_pth.endswith('.txt'):
             results = load_single_txt(result_pth)
             return results
+        elif result_pth.endswith('.json'):
+            results = load_single_json(result_pth)
+            return results
         else:
             print("Cannot support result format")
         # elif result_pth.endswith('.json'):
@@ -709,7 +829,18 @@ def load_results(result_pth, query_frame = None, sort_by_num = False):
         return None    
 
 
+def load_checks(check_pth, query_frame = None, sort_by_num = False):
+    if os.path.isfile(check_pth):
+        if check_pth.endswith('.pkl'):
+            checks = load_pkl_check(check_pth, query_frame)
+            return checks
+    else:
+        raise TypeError('Cannot load checks')
+        return None 
+
+
 def load_labels(label_pth, query_frame = None, sort_by_num = False):
+    print("Label pth: ", label_pth)
     if os.path.isdir(label_pth):
         labels = load_dir_label(label_pth, query_frame)
         return labels
@@ -725,7 +856,6 @@ def load_labels(label_pth, query_frame = None, sort_by_num = False):
         return None
 
 
-
 def get_cloud_list(cloud_dir, sort_by_num = False):
     cloud_list = os.listdir(cloud_dir)
     if sort_by_num:
@@ -734,6 +864,7 @@ def get_cloud_list(cloud_dir, sort_by_num = False):
         cloud_list = sorted(cloud_list)
     cloud_list = [os.path.join(cloud_dir, cloud_name) for cloud_name in cloud_list]
     return cloud_list
+
 
 def get_voxel_list(voxel_dir, sort_by_num = False):
     voxel_list = os.listdir(voxel_dir)
@@ -744,6 +875,7 @@ def get_voxel_list(voxel_dir, sort_by_num = False):
     voxel_list = [os.path.join(voxel_dir, voxel_name) for voxel_name in voxel_list]
     return voxel_list
 
+
 def get_image_list(image_dir, sort_by_num = False):
     image_list = os.listdir(image_dir)
     if sort_by_num:
@@ -752,6 +884,7 @@ def get_image_list(image_dir, sort_by_num = False):
         image_list = sorted(image_list)
     image_list = [os.path.join(image_dir, image_name) for image_name in image_list]
     return image_list
+
 
 def get_polys(frame_polys = None):
     if frame_polys is not None:
@@ -764,6 +897,7 @@ def get_polys(frame_polys = None):
         return poly_boxes3d, poly_vertices, poly_labels, poly_trackids
     else:
         return None
+
 
 def get_boxes_from_results(frame_results = None):
     if frame_results is not None:
@@ -780,6 +914,7 @@ def get_boxes_from_results(frame_results = None):
     else:
         return None, None, None, None
 
+
 def get_boxes_from_labels(frame_labels = None):
     if frame_labels is not None:
         # classes = ['', 'Car', 'Pedestrian', 'Cyclist', 'Truck', 'Cone', 'Unknown', 'Dontcare',
@@ -794,7 +929,6 @@ def get_boxes_from_labels(frame_labels = None):
         return gt_boxes3d, gt_scores, gt_labels, gt_trackids
     else:
         return None, None, None, None
-
 
 
 def count_number(frame_results = None, frame_labels = None, view_region = [0, 40, -50, 50]):
