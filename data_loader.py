@@ -181,6 +181,46 @@ def load_cloud(cloud_path, rotation = 0.0):
             points[:, :3] = rotated_points_xyz
     return points
 
+
+def save_cloud(des_cloud_path, cloud):
+    '''
+        cloud: nx4 array
+    '''
+    if cloud.shape[1] != 4:
+        raise BaseException('The cols of cloud != 4')
+        return False
+    if des_cloud_path.endswith('.pcd'):
+        des_point_type = np.dtype(
+            [('x', np.float32), ('y', np.float32), ('z', np.float32), ('intensity', np.uint8)]
+        )
+        points = np.zeros(cloud.shape[0], dtype=des_point_type)
+        points['x'] = cloud[:, 0]
+        points['y'] = cloud[:, 1]
+        points['z'] = cloud[:, 2]
+        points['intensity'] = cloud[:, 3].astype(np.uint8)
+        # Write the header
+        with open(des_cloud_path, 'w') as fp:
+            fp.write(
+                '# .PCD v0.7 - Point Cloud Data file format\nVERSION 0.7\nFIELDS x y z intensity\nSIZE 4 4 4 1\nTYPE F F F I\nCOUNT 1 1 1 1')
+            fp.write('\nWIDTH ' + str(cloud.shape[0]))
+            fp.write('\nHEIGHT 1\nVIEWPOINT 0 0 0 1 0 0 0')
+            fp.write('\nPOINTS ' + str(cloud.shape[0]))
+            fp.write('\nDATA binary')
+            fp.write('\n')
+        # Write the points
+        with open(des_cloud_path, 'ab+') as fp:
+            pc_data = np.array(points, dtype=des_point_type)
+            fp.write(pc_data.tostring('C'))
+        return True
+    elif des_cloud_path.endswith('.bin'):
+        cloud = cloud.astype(np.float32)
+        cloud.tofile(des_cloud_path)
+        return True
+    else:
+        raise TypeError('The suffix of cloud pth is not supported')
+        return False
+
+
 def load_line(ln):
     '''
         There are several formats for result line.
